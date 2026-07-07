@@ -39,6 +39,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // 요청 스코프 감사 컨텍스트 — audit.context/write 미들웨어와 AuditLogger가 공유
+        $this->app->scoped(\App\Services\Workflow\Admin\AuditContext::class);
+
         $this->app->bind(ToolRunner::class, SymfonyProcessToolRunner::class);
 
         // 운영 배포 전 실제 검색엔진 클라이언트로 교체 필수 —
@@ -62,6 +65,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // permission 문자열 Gate 정의 단일 지점 — HIGH는 hasDirectPermission만 (ADR-0004)
+        \App\Services\Workflow\Admin\WorkflowPermissionService::registerGates();
     }
 }
