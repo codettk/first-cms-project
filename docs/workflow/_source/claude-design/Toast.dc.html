@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265);
+    --border: oklch(0.918 0.004 265);
+    --text-1: oklch(0.245 0.012 265); --text-3: oklch(0.63 0.008 265);
+    --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+    --ok-bg: oklch(0.95 0.03 155); --ok-fg: oklch(0.44 0.08 155);
+    --danger-bg: oklch(0.96 0.03 25); --danger-fg: oklch(0.51 0.16 25);
+    --shadow-lg: 0 16px 48px oklch(0.2 0.02 265 / 0.18);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265);
+    --border: oklch(0.29 0.007 265);
+    --text-1: oklch(0.96 0.003 265); --text-3: oklch(0.55 0.008 265);
+    --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+    --ok-bg: oklch(0.31 0.05 155); --ok-fg: oklch(0.84 0.1 155);
+    --danger-bg: oklch(0.33 0.07 25); --danger-fg: oklch(0.84 0.13 25);
+    --shadow-lg: 0 16px 48px oklch(0 0 0 / 0.6);
+  }
+  * { box-sizing: border-box; }
+  @keyframes tstIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+</style>
+</helmet>
+<sc-if value="{{ open }}">
+  <div style="{{ posStyle }}">
+    <div style="display: flex; align-items: center; gap: 12px; min-width: 280px; max-width: 380px; padding: 14px 16px; border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); animation: tstIn .28s cubic-bezier(0.32,0.72,0,1); font-family: 'IBM Plex Sans KR', sans-serif;">
+      <span style="width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; background: {{ iconBg }}; color: {{ iconFg }};"><ds-icon glyph="{{ glyph }}" size="17" sw="1.9"></ds-icon></span>
+      <div style="flex: 1; font-size: 13.5px; font-weight: 500; color: var(--text-1); line-height: 1.4;">{{ message }}</div>
+      <sc-if value="{{ dismissable }}"><button onClick="{{ onClose }}" style="width: 26px; height: 26px; border-radius: 7px; border: none; background: transparent; color: var(--text-3); cursor: pointer; display: grid; place-items: center; flex-shrink: 0;" style-hover="background: var(--bg-subtle);"><ds-icon glyph="x" size="15"></ds-icon></button></sc-if>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 400, &quot;height&quot;: 80}, &quot;tone&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;success&quot;, &quot;error&quot;, &quot;info&quot;], &quot;default&quot;: &quot;success&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;message&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;변경사항이 저장되었습니다&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;inline&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;dismissable&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;open&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const tone = p.tone ?? 'success';
+    const inline = p.inline === true || p.inline === 'true';
+    const map = {
+      success: { glyph: 'checkCircle', bg: 'var(--ok-bg)', fg: 'var(--ok-fg)' },
+      error: { glyph: 'alert', bg: 'var(--danger-bg)', fg: 'var(--danger-fg)' },
+      info: { glyph: 'info', bg: 'var(--accent-subtle)', fg: 'var(--accent-text)' },
+    };
+    const T = map[tone] || map.success;
+    return {
+      open: p.open !== false && p.open !== 'false',
+      message: p.message ?? '변경사항이 저장되었습니다',
+      glyph: T.glyph, iconBg: T.bg, iconFg: T.fg,
+      dismissable: p.dismissable !== false && p.dismissable !== 'false',
+      posStyle: inline ? 'display: inline-flex;' : 'position: fixed; bottom: 24px; right: 24px; z-index: 80;',
+      onClose: p.onClose || (() => {}),
+    };
+  }
+}
+</script>
+</body>
+</html>

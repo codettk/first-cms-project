@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265); --bg-hover: oklch(0.952 0.004 265);
+    --border: oklch(0.918 0.004 265); --border-strong: oklch(0.85 0.006 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265); --bg-hover: oklch(0.278 0.008 265);
+    --border: oklch(0.29 0.007 265); --border-strong: oklch(0.38 0.01 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+  }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<span style="{{ rootStyle }}">
+  <sc-if value="{{ showGlyph }}"><ds-icon glyph="{{ glyph }}" size="14"></ds-icon></sc-if>
+  <span style="white-space: nowrap;">{{ label }}</span>
+  <sc-if value="{{ removable }}"><button onClick="{{ onRemove }}" style="{{ removeStyle }}" style-hover="background: var(--bg-hover); color: var(--text-1);"><ds-icon glyph="x" size="13" sw="2"></ds-icon></button></sc-if>
+</span>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 160, &quot;height&quot;: 56}, &quot;label&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;브랜드&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;glyph&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;removable&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;selected&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;pill&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const label = p.label ?? 'Chip';
+    const removable = p.removable !== false && p.removable !== 'false';
+    const selected = p.selected === true || p.selected === 'true';
+    const pill = p.pill === true || p.pill === 'true';
+    const glyph = p.glyph ?? '';
+
+    const radius = pill ? '20px' : '8px';
+    let rootStyle;
+    if (selected) {
+      rootStyle = `display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 ${removable ? '6px' : '12px'} 0 12px; border-radius: ${radius}; font-family: inherit; font-size: 13px; font-weight: 500; background: var(--accent-subtle); color: var(--accent-text); border: 1px solid transparent;`;
+    } else {
+      rootStyle = `display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 ${removable ? '6px' : '12px'} 0 12px; border-radius: ${radius}; font-family: inherit; font-size: 13px; font-weight: 500; background: var(--bg-subtle); color: var(--text-1); border: 1px solid var(--border);`;
+    }
+    return {
+      label, glyph, removable,
+      showGlyph: !!glyph,
+      rootStyle,
+      removeStyle: `display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; border: none; background: transparent; color: var(--text-3); cursor: pointer; flex-shrink: 0; padding: 0;`,
+      onRemove: p.onRemove || (() => {}),
+    };
+  }
+}
+</script>
+</body>
+</html>

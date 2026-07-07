@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; }
+  doc-page .muted { color: #6b7080; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Transcode Profile &amp; Rendition Preset Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Transcode Profile &amp; Rendition Preset Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">트랜스코딩 프로파일·렌디션 프리셋 정의서 — Worker 출력 규격 표준</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: Worker Agent Spec · Migration &amp; Seed Spec (각 v1.0)</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>Master 원본을 웹 표출용 Proxy·Thumbnail·Catalog·Preview로 변환하는 <b>표준 프리셋</b>을 확정한다: 유형별 출력 규격, <code>transcode_profiles</code> seed 기준, ffmpeg·libvips·LibreOffice 실행 옵션, 그리고 <code>media_renditions</code>의 profile_id/variant_key/rendition_type 연결 규칙을 정의한다. Worker Handler는 본 문서의 프로파일만 참조하며 출력 규격을 코드에 하드코딩하지 않는다.</p>
+
+  <h2>2. 프로파일 설계 원칙</h2>
+  <ul>
+    <li>Master 파일은 절대 수정·삭제하지 않는다 — 모든 변환은 읽기 전용 입력.</li>
+    <li>웹 표출은 프록시·미리보기 파일만 사용한다.</li>
+    <li>기본 목표는 <b>저해상도·저용량·빠른 웹 재생</b> — 품질 보존이 아니라 미리보기·운영 편의가 목적.</li>
+    <li>프리셋은 <code>transcode_profiles</code> seed로 관리 — 코드 하드코딩 금지, 운영 중 조정 가능.</li>
+    <li>다중 화질 확장 대비 <code>variant_key</code> 사용 (§10).</li>
+    <li>모든 출력은 임시 경로 생성 → 검증(§16) → atomic rename.</li>
+  </ul>
+
+  <h2>3. transcode_profiles 테이블 기준</h2>
+  <table>
+    <tr><th style="width: 130px;">컬럼</th><th style="width: 120px;">타입</th><th>의미 / 사용처</th></tr>
+    <tr><td><code>id</code></td><td>bigint PK</td><td>renditions.profile_id·job payload가 참조</td></tr>
+    <tr><td><code>code</code></td><td>varchar(50) UQ</td><td>사람이 읽는 식별자 (VIDEO_PROXY_720P) — template step config가 참조</td></tr>
+    <tr><td><code>name</code></td><td>varchar(200)</td><td>관리자 화면 표시명</td></tr>
+    <tr><td><code>media_type</code></td><td>varchar(10)</td><td>VIDEO/IMAGE/AUDIO/DOC/<b>COMMON</b> — COMMON은 여러 유형에서 재사용되는 공통 프리셋(THUMBNAIL_DEFAULT·CATALOG_DEFAULT)용. Handler 유효성 검사</td></tr>
+    <tr><td><code>rendition_type</code></td><td>varchar(30)</td><td>생성될 rendition 유형 (PROXY_VIDEO 등)</td></tr>
+    <tr><td><code>variant_key</code></td><td>varchar(50)</td><td>동일 rendition_type 내 변형 구분 (720p, thumb_480…)</td></tr>
+    <tr><td><code>output_format</code></td><td>varchar(20)</td><td>컨테이너/포맷 (mp4, webp, m4a, pdf…)</td></tr>
+    <tr><td><code>codec</code></td><td>varchar(30)</td><td>주 코덱 (h264, webp, aac…)</td></tr>
+    <tr><td><code>width / height</code></td><td>int nullable</td><td>최대 변 기준 (비율 유지 스케일) — NULL이면 미적용</td></tr>
+    <tr><td><code>bitrate / audio_bitrate</code></td><td>int nullable</td><td>kbps — 영상·오디오</td></tr>
+    <tr><td><code>frame_rate</code></td><td>numeric nullable</td><td>NULL = 원본 유지 (상한 30)</td></tr>
+    <tr><td><code>quality</code></td><td>int nullable</td><td>이미지 quality / 영상 CRF</td></tr>
+    <tr><td><code>params</code></td><td>jsonb</td><td>도구별 추가 옵션 (preset, pix_fmt, dpi, page_limit, lang…)</td></tr>
+    <tr><td><code>is_active</code></td><td>boolean</td><td>false면 Job 실행 거부 (§15)</td></tr>
+  </table>
+
+  <h2>4. VIDEO 프록시 프로파일</h2>
+  <table>
+    <tr><th style="width: 118px;">항목</th><th>VIDEO_PROXY_720P <span class="muted">(기본 운영)</span></th><th>VIDEO_PROXY_480P</th><th>VIDEO_PROXY_360P</th><th>VIDEO_PROXY_HLS_720P <span class="muted">(opt)</span></th></tr>
+    <tr><td>rendition_type</td><td>PROXY_VIDEO</td><td>PROXY_VIDEO</td><td>PROXY_VIDEO</td><td>PROXY_VIDEO</td></tr>
+    <tr><td>variant_key</td><td><code>720p</code></td><td><code>480p</code></td><td><code>360p</code></td><td><code>hls_720p</code></td></tr>
+    <tr><td>container</td><td>MP4 (faststart)</td><td>MP4</td><td>MP4</td><td>HLS (m3u8+ts)</td></tr>
+    <tr><td>video / audio codec</td><td>H.264 / AAC</td><td>H.264 / AAC</td><td>H.264 / AAC</td><td>H.264 / AAC</td></tr>
+    <tr><td>해상도 (최대 변)</td><td>1280×720</td><td>854×480</td><td>640×360</td><td>1280×720</td></tr>
+    <tr><td>bitrate / audio</td><td>2500k / 128k</td><td>1200k / 96k</td><td>700k / 96k</td><td>2500k / 128k</td></tr>
+    <tr><td>fps / pix_fmt</td><td>원본(≤30) / yuv420p</td><td>≤30 / yuv420p</td><td>≤30 / yuv420p</td><td>≤30 / yuv420p</td></tr>
+    <tr><td>웹 호환</td><td>전 브라우저</td><td>전 브라우저</td><td>전 브라우저</td><td>hls.js 필요</td></tr>
+    <tr><td>용도</td><td>상세 화면 재생 표준</td><td>저대역 환경</td><td>모바일·목록 미리보기</td><td>장시간 영상 스트리밍</td></tr>
+  </table>
+  <p>v1 seed는 <b>VIDEO_PROXY_720P만 활성</b> — 480P/360P/HLS는 is_active=false로 미리 정의해 두고 필요 시 활성화한다(다중 화질 활성 시 §10 unique 재구성 선행).</p>
+
+  <h2>5. IMAGE 프록시 프로파일</h2>
+  <table>
+    <tr><th style="width: 118px;">항목</th><th>IMAGE_PROXY_WEBP_2048 <span class="muted">(기본)</span></th><th>IMAGE_PROXY_JPEG_2048 <span class="muted">(opt)</span></th><th>IMAGE_THUMBNAIL_WEBP_480</th><th>IMAGE_THUMBNAIL_WEBP_240 <span class="muted">(opt)</span></th></tr>
+    <tr><td>output / 최대 변</td><td>WebP / 2048px</td><td>JPEG / 2048px</td><td>WebP / 480px</td><td>WebP / 240px</td></tr>
+    <tr><td>quality</td><td>82</td><td>85</td><td>75</td><td>70</td></tr>
+    <tr><td>EXIF orientation</td><td>픽셀 적용 후 태그 제거</td><td>동일</td><td>동일</td><td>동일</td></tr>
+    <tr><td>GPS 등 EXIF</td><td>전체 strip</td><td>strip</td><td>strip</td><td>strip</td></tr>
+    <tr><td>투명도</td><td>유지 (WebP alpha)</td><td>흰색 배경 합성</td><td>유지</td><td>유지</td></tr>
+    <tr><td>용도</td><td>상세 화면 표출</td><td>WebP 미지원 클라이언트</td><td>목록 썸네일</td><td>밀집 그리드·모바일</td></tr>
+  </table>
+  <pre>vipsthumbnail input.tif -o proxy.webp[Q=82,strip] --size 2048x2048 --rotate  # autorotate + strip</pre>
+
+  <h2>6. AUDIO 프록시 프로파일</h2>
+  <table>
+    <tr><th style="width: 118px;">항목</th><th>AUDIO_PROXY_AAC_128K <span class="muted">(기본)</span></th><th>AUDIO_PROXY_MP3_128K <span class="muted">(opt)</span></th><th>AUDIO_WAVEFORM_JSON</th><th>AUDIO_WAVEFORM_PNG</th></tr>
+    <tr><td>container / codec</td><td>M4A / AAC-LC</td><td>MP3 / libmp3lame</td><td>JSON (peaks)</td><td>PNG</td></tr>
+    <tr><td>bitrate</td><td>128k</td><td>128k</td><td>—</td><td>—</td></tr>
+    <tr><td>sample rate / ch</td><td>44.1kHz / 2ch (다운믹스)</td><td>44.1kHz / 2ch</td><td>1000 peaks/track</td><td>1200×240px</td></tr>
+    <tr><td>용도</td><td>웹 미리듣기 표준</td><td>구형 클라이언트</td><td>플레이어 파형 렌더</td><td>목록·정적 파형 표시</td></tr>
+  </table>
+  <pre>ffmpeg -i master.wav -c:a aac -b:a 128k -ar 44100 -ac 2 -movflags +faststart proxy.m4a
+audiowaveform -i master.wav -o wave.json --pixels-per-second 20 --bits 8
+audiowaveform -i master.wav -o wave.png -w 1200 -h 240 --background-color FFFFFF00</pre>
+
+  <h2>7. DOCUMENT 미리보기 프로파일</h2>
+  <table>
+    <tr><th style="width: 148px;">프로파일</th><th style="width: 105px;">대상 / 방식</th><th>규격 / 옵션</th></tr>
+    <tr><td><code>DOC_PREVIEW_WEBP_144DPI</code> <span class="muted">(기본)</span></td><td>PDF: pdftoppm 직접<br>Office: soffice→PDF→pdftoppm</td><td>WebP, 144dpi, 페이지 최대 변 1600px, quality 80, page limit 200, page_no 저장</td></tr>
+    <tr><td><code>DOC_PREVIEW_PDF</code> <span class="muted">(opt)</span></td><td>Office → PDF</td><td>변환 PDF 자체를 DOCUMENT_PREVIEW rendition으로 보관 (다운로드형 미리보기)</td></tr>
+    <tr><td><code>DOC_THUMBNAIL_WEBP_480</code></td><td>1페이지 이미지 리사이즈</td><td>WebP 480px, quality 75</td></tr>
+    <tr><td><code>DOC_TEXT_EXTRACT_DEFAULT</code></td><td>pdftotext / XML 파싱</td><td>UTF-8 txt, 페이지 구분자 유지, char_count 기록</td></tr>
+    <tr><td><code>DOC_OCR_KO_EN</code></td><td>Tesseract</td><td>lang=kor+eng, psm 3, 페이지 단위, confidence 기록, page limit 200</td></tr>
+  </table>
+
+  <h2>8. THUMBNAIL / CATALOG 프리셋</h2>
+  <table>
+    <tr><th style="width: 148px;">항목</th><th>THUMBNAIL_DEFAULT</th><th>CATALOG_DEFAULT</th></tr>
+    <tr><td>출력</td><td>WebP · width 480 · quality 75 · 1장</td><td>WebP · width 320 · quality 70 · N장</td></tr>
+    <tr><td>영상 추출 시점</td><td>5초 (길이 &lt; 10초면 중간 프레임)</td><td>5s · 10s · 20s · 30s · 이후 30s 간격, <b>최대 20장</b></td></tr>
+    <tr><td>이미지 원천</td><td>Proxy Image 리사이즈</td><td>— (영상 전용)</td></tr>
+    <tr><td>문서 원천</td><td>1페이지 Preview 리사이즈</td><td>—</td></tr>
+    <tr><td>저장</td><td>rendition THUMBNAIL (variant_key=thumb_480)</td><td>rendition CATALOG + timecode_ms 필수</td></tr>
+  </table>
+
+  <h2>9. rendition_type / storage_zone / profile 관계</h2>
+  <table>
+    <tr><th style="width: 205px;">profile code</th><th style="width: 140px;">rendition_type</th><th style="width: 95px;">storage_zone</th><th style="width: 92px;">variant_key</th><th>키 필드</th></tr>
+    <tr><td>VIDEO_PROXY_720P</td><td>PROXY_VIDEO</td><td>PROXY</td><td>720p</td><td>—</td></tr>
+    <tr><td>IMAGE_PROXY_WEBP_2048</td><td>PROXY_IMAGE</td><td>PROXY</td><td>default</td><td>—</td></tr>
+    <tr><td>IMAGE_THUMBNAIL_WEBP_480 / THUMBNAIL_DEFAULT</td><td>THUMBNAIL</td><td>THUMBNAIL</td><td>thumb_480</td><td>—</td></tr>
+    <tr><td>AUDIO_PROXY_AAC_128K</td><td>PROXY_AUDIO</td><td>PROXY</td><td>default</td><td>—</td></tr>
+    <tr><td>AUDIO_WAVEFORM_JSON / PNG</td><td>WAVEFORM</td><td>PROXY</td><td>wave_json / wave_png</td><td>—</td></tr>
+    <tr><td>CATALOG_DEFAULT</td><td>CATALOG</td><td>CATALOG</td><td>catalog_default</td><td>timecode_ms 필수</td></tr>
+    <tr><td>DOC_PREVIEW_WEBP_144DPI</td><td>PAGE_PREVIEW</td><td>DOCUMENT</td><td>page_preview</td><td>page_no 필수</td></tr>
+    <tr><td>DOC_PREVIEW_PDF</td><td>DOCUMENT_PREVIEW</td><td>DOCUMENT</td><td>default</td><td>—</td></tr>
+    <tr><td>DOC_TEXT_EXTRACT_DEFAULT</td><td>EXTRACTED_TEXT</td><td>DOCUMENT</td><td>default</td><td>—</td></tr>
+    <tr><td>DOC_OCR_KO_EN</td><td>OCR_TEXT</td><td>DOCUMENT</td><td>ocr_default</td><td>—</td></tr>
+  </table>
+
+  <h2>10. variant_key 정책</h2>
+  <p>표준 값: <code>default</code> · <code>720p</code> · <code>480p</code> · <code>360p</code> · <code>hls_720p</code> · <code>thumb_480</code> · <code>thumb_240</code> · <code>catalog_default</code> · <code>page_preview</code> · <code>wave_json</code> · <code>wave_png</code> · <code>ocr_default</code>. 규칙: 소문자 snake, profile code와 1:1 대응(profile이 variant_key를 소유).</p>
+  <p><b>unique key 재구성</b> (Migration Spec §7의 partial unique 3종을 variant_key 포함으로 대체):</p>
+  <pre>-- 단건: content_id + rendition_type + variant_key
+CREATE UNIQUE INDEX uq_rend_single ON media_renditions
+  (content_id, rendition_type, variant_key)
+  WHERE page_no IS NULL AND timecode_ms IS NULL;
+-- 페이지: … + page_no        (WHERE page_no IS NOT NULL)
+-- 타임코드: … + timecode_ms  (WHERE timecode_ms IS NOT NULL)</pre>
+  <p class="muted">variant_key는 <code>NOT NULL DEFAULT 'default'</code>로 추가 — 기존 행 마이그레이션 불필요, 다중 화질 도입 시 스키마 변경 없이 720p/480p 행이 공존한다.</p>
+
+  <h2>11. ffmpeg 옵션 표준</h2>
+  <ul>
+    <li>공통: <code>-y -hide_banner -loglevel error -progress pipe:1</code> — 진행률은 pipe 파싱, stderr는 오류 전용.</li>
+    <li>스케일: <code>-vf "scale='min(1280,iw)':-2"</code> — 업스케일 금지, 짝수 높이 보장(-2).</li>
+    <li>fps: <code>-r 30</code>은 원본 &gt; 30fps일 때만 적용(params 플래그).</li>
+    <li>레이트 제어: CRF 23 + <code>-maxrate/-bufsize</code>로 상한 — 화질·용량 균형.</li>
+    <li><code>-movflags +faststart</code> 필수 — 웹 프로그레시브 재생.</li>
+    <li><code>-pix_fmt yuv420p</code> 필수 — 브라우저 호환(4:2:2/4:4:4 원본 대응).</li>
+    <li>exit ≠ 0 또는 출력 duration 검증 실패 → 임시 파일 삭제 + EXTERNAL_TOOL_ERROR.</li>
+  </ul>
+  <pre>ffmpeg -y -hide_banner -loglevel error -progress pipe:1 \
+  -i {master} \
+  -vf "scale='min(1280,iw)':-2" -c:v libx264 -preset medium -crf 23 \
+  -maxrate 2500k -bufsize 5000k -pix_fmt yuv420p \
+  -c:a aac -b:a 128k -ac 2 \
+  -movflags +faststart {out}.tmp.mp4
+# GPU 노드: -c:v h264_nvenc -preset p4 -cq 26 (profile params.gpu_codec로 전환)</pre>
+
+  <h2>12. 이미지 처리 옵션 표준 (libvips)</h2>
+  <ul>
+    <li>autorotate(EXIF Orientation 픽셀 적용) 후 메타데이터 <code>strip</code> — GPS·기기 정보 제거.</li>
+    <li>리사이즈는 최대 변 기준 축소만(업스케일 금지) — <code>vipsthumbnail --size WxH</code>.</li>
+    <li>quality: WebP 82(프록시)/75(썸네일), JPEG 85.</li>
+    <li>색공간: CMYK·AdobeRGB → sRGB 변환(<code>--eprofile srgb</code>), ICC 프로파일 제거.</li>
+    <li>대형 이미지: vips 스트리밍 처리 + 픽셀 수 상한(예: 10만×10만 거부 — PERMANENT).</li>
+    <li>디코딩 실패 → USER_FILE_ERROR / 도구 크래시 → EXTERNAL_TOOL_ERROR.</li>
+  </ul>
+
+  <h2>13. 문서 변환 옵션 표준</h2>
+  <ul>
+    <li>Office → PDF: <code>soffice --headless --norestore --convert-to pdf --outdir {tmp}</code> — job마다 전용 프로필 디렉터리(<code>-env:UserInstallation</code>)로 프로세스 격리, 완료 후 프로세스 그룹 종료.</li>
+    <li>PDF → 이미지: <code>pdftoppm -r 144 -png -f 1 -l {limit} {pdf} {prefix}</code> → vips로 WebP 변환·리사이즈.</li>
+    <li>page limit 200 — 초과분은 생성하지 않고 WARN 로그(SUCCESS 유지).</li>
+    <li>timeout: 문서당 30분(job timeout과 별개로 페이지당 10초 가드).</li>
+    <li>암호화 문서: pdfinfo 사전 검사에서 감지 → ENCRYPTED_DOC (PERMANENT).</li>
+    <li>개별 페이지 렌더 실패: 해당 페이지 건너뛰고 기록 — 1페이지 이상 성공이면 job SUCCESS.</li>
+  </ul>
+
+  <h2>14. Profile Seed 설계</h2>
+  <pre>// database/seeders/TranscodeProfileSeeder.php (발췌 — 전체 12종)
+$profiles = [
+  ['code'=>'VIDEO_PROXY_720P','name'=>'영상 프록시 720p','media_type'=>'VIDEO',
+   'rendition_type'=>'PROXY_VIDEO','variant_key'=>'720p','output_format'=>'mp4',
+   'codec'=>'h264','width'=>1280,'height'=>720,'bitrate'=>2500,'audio_bitrate'=>128,
+   'frame_rate'=>null,'quality'=>23,   // CRF
+   'params'=>['preset'=>'medium','pix_fmt'=>'yuv420p','faststart'=>true,
+              'maxrate'=>'2500k','bufsize'=>'5000k','fps_cap'=>30,
+              'gpu_codec'=>'h264_nvenc','gpu_cq'=>26],
+   'is_active'=>true],
+  ['code'=>'VIDEO_PROXY_480P', …,'is_active'=>false],
+  ['code'=>'VIDEO_PROXY_360P', …,'is_active'=>false],
+  ['code'=>'VIDEO_PROXY_HLS_720P','output_format'=>'hls',
+   'params'=>['segment_sec'=>6,'playlist'=>'m3u8'],'is_active'=>false],
+
+  ['code'=>'IMAGE_PROXY_WEBP_2048','media_type'=>'IMAGE','rendition_type'=>'PROXY_IMAGE',
+   'variant_key'=>'default','output_format'=>'webp','codec'=>'webp',
+   'width'=>2048,'height'=>2048,'quality'=>82,
+   'params'=>['strip'=>true,'autorotate'=>true,'srgb'=>true,'alpha'=>true],'is_active'=>true],
+  ['code'=>'IMAGE_THUMBNAIL_WEBP_480','rendition_type'=>'THUMBNAIL',
+   'variant_key'=>'thumb_480','width'=>480,'quality'=>75,'is_active'=>true],
+
+  ['code'=>'AUDIO_PROXY_AAC_128K','media_type'=>'AUDIO','rendition_type'=>'PROXY_AUDIO',
+   'variant_key'=>'default','output_format'=>'m4a','codec'=>'aac','audio_bitrate'=>128,
+   'params'=>['sample_rate'=>44100,'channels'=>2,'faststart'=>true],'is_active'=>true],
+  ['code'=>'AUDIO_WAVEFORM_JSON','rendition_type'=>'WAVEFORM','variant_key'=>'wave_json',
+   'output_format'=>'json','params'=>['pixels_per_second'=>20,'bits'=>8],'is_active'=>true],
+
+  ['code'=>'DOC_PREVIEW_WEBP_144DPI','media_type'=>'DOC','rendition_type'=>'PAGE_PREVIEW',
+   'variant_key'=>'page_preview','output_format'=>'webp','width'=>1600,'quality'=>80,
+   'params'=>['dpi'=>144,'page_limit'=>200],'is_active'=>true],
+  ['code'=>'DOC_OCR_KO_EN','rendition_type'=>'OCR_TEXT','variant_key'=>'ocr_default',
+   'output_format'=>'txt','params'=>['lang'=>'kor+eng','psm'=>3],'is_active'=>true],
+
+  ['code'=>'THUMBNAIL_DEFAULT','media_type'=>'COMMON','rendition_type'=>'THUMBNAIL',
+   'variant_key'=>'thumb_480','output_format'=>'webp','width'=>480,'quality'=>75,
+   'params'=>['video_seek_sec'=>5,'short_video_middle'=>true],'is_active'=>true],
+  ['code'=>'CATALOG_DEFAULT','media_type'=>'COMMON','rendition_type'=>'CATALOG','variant_key'=>'catalog_default',
+   'output_format'=>'webp','width'=>320,'quality'=>70,
+   'params'=>['timecodes_sec'=>[5,10,20,30],'interval_sec'=>30,'max_count'=>20],'is_active'=>true],
+];
+DB::table('transcode_profiles')->upsert($profiles /* json_encode params */, ['code']);</pre>
+
+  <h2>15. Worker 적용 방식</h2>
+  <ol>
+    <li><code>workflow_template_steps.config</code>에 <code>profile_code</code> 저장 (예: TC step → <code>{"profile":"VIDEO_PROXY_720P"}</code>).</li>
+    <li>인스턴스화 시 config가 job.payload로 복사 — 실행 시점 프로파일 고정(재현성).</li>
+    <li>Handler가 code로 <code>transcode_profiles</code> 조회 → <b>is_active=false면 실행 거부</b>(SYSTEM_ERROR, 재시도 안 함 — 운영 설정 오류로 알림).</li>
+    <li><code>params</code>를 도구 인자로 변환(ProfileCompiler — 프로파일→인자 배열 매핑 단일 클래스).</li>
+    <li>생성 rendition에 <code>profile_id</code> + <code>variant_key</code> 기록.</li>
+    <li>GPU Worker는 <code>params.gpu_codec</code> 존재 + 자체 gpu.enabled일 때만 GPU 경로 사용.</li>
+  </ol>
+
+  <h2>16. 검증 기준</h2>
+  <table>
+    <tr><th style="width: 82px;">유형</th><th>검증 항목 (하나라도 실패 시 임시 파일 삭제 + 실패 처리)</th></tr>
+    <tr><td>영상</td><td>파일 존재·크기&gt;0 · ffprobe 재파싱 성공 · duration 원본 ±1s · codec=h264/aac · 해상도 ≤ 프로파일 상한 · faststart(moov 선두) 확인</td></tr>
+    <tr><td>이미지</td><td>파일 존재 · vips 디코딩 성공 · 최대 변 이내 · EXIF 잔존 0건(GPS 태그 grep) · sRGB 색공간</td></tr>
+    <tr><td>오디오</td><td>파일 존재 · duration ±0.5s · codec/bitrate 일치</td></tr>
+    <tr><td>문서</td><td>1페이지 이상 생성 · page_count = min(원본, limit) · 각 이미지 디코딩 성공</td></tr>
+  </table>
+
+  <h2>17. 운영 시 고려사항</h2>
+  <ul>
+    <li><b>프로파일 변경</b>: 기존 산출물은 자동 재처리하지 않는다 — 변경 후 신규 콘텐츠만 적용, 소급은 관리자 일괄 재처리로. rendition의 profile_id로 세대 식별 가능.</li>
+    <li><b>버전 관리</b>: 프로파일은 UPDATE 대신 새 code 추가(<code>VIDEO_PROXY_720P_V2</code>) + 구버전 비활성 — 재현성 보존.</li>
+    <li><b>다중 화질</b>: variant_key unique 재구성(§10) 선행 후 480P 등 활성화 — TC job을 프로파일별로 분할할지(권장) 단일 job 다중 출력일지는 그때 결정.</li>
+    <li><b>HLS 도입 시</b>: 세그먼트 다건을 rendition 1행(playlist path) + metadata(세그먼트 목록)로 저장 — 행 폭발 방지.</li>
+    <li><b>폐쇄망</b>: ffmpeg/libvips/LibreOffice/Tesseract 버전을 이미지에 고정(버전 업은 검증 후 일괄) — 버전 차이가 출력 결과·검증 기준에 영향.</li>
+    <li>GPU 인코딩은 CRF와 화질 특성이 다름(cq 26 ≈ crf 23 근사) — 노드별 화질 편차를 수용할지 CPU 통일할지 운영 결정 필요.</li>
+  </ul>
+
+  <h2>18. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>관리자 화면 하이파이 목업</b> — Frame CMS 디자인 시스템 기반 운영 콘솔 프로토타입</li>
+    <li><b>장애 대응 Runbook</b> — 알림별 표준 대응 절차</li>
+    <li><b>부하 테스트 계획</b> — 프로파일별 처리 시간 벤치마크 포함</li>
+    <li><b>사용자용 업로드 가이드</b> — 지원 포맷·용량 제한 안내 문서</li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-bottom: 0; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

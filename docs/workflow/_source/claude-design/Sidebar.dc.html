@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265);
+    --border: oklch(0.918 0.004 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-fg: oklch(0.99 0 0); --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+    --shadow-sm: 0 1px 2px oklch(0.2 0.02 265 / 0.06);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265);
+    --border: oklch(0.29 0.007 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-fg: oklch(0.16 0.02 264); --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+  }
+  * { box-sizing: border-box; }
+  [data-collapsed="true"] [data-lbl] { opacity: 0; width: 0; overflow: hidden; }
+  [data-collapsed="true"] [data-wide] { display: none; }
+  [data-collapsed="true"] [data-navitem] { justify-content: center; }
+</style>
+</helmet>
+<aside data-collapsed="{{ collapsed }}" style="{{ asideStyle }}">
+  <div data-navitem style="height: 60px; flex-shrink: 0; display: flex; align-items: center; gap: 11px; padding: 0 18px; border-bottom: 1px solid var(--border);">
+    <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: var(--accent-fg); flex-shrink: 0; box-shadow: var(--shadow-sm);"><ds-icon glyph="{{ brandGlyph }}" size="18"></ds-icon></div>
+    <div data-lbl style="font-size: 16px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; transition: opacity .15s; color: var(--text-1);">{{ brand }}</div>
+  </div>
+  <nav style="flex: 1; padding: 14px 12px; display: flex; flex-direction: column; gap: 3px; overflow-y: auto;">
+    <sc-if value="{{ hasSection }}"><div data-wide style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); padding: 8px 10px 6px;">{{ section }}</div></sc-if>
+    <sc-for list="{{ navView }}" as="item" hint-placeholder-count="4">
+      <button data-navitem onClick="{{ item.onClick }}" title="{{ item.label }}" style="{{ item.style }}" style-hover="{{ item.hover }}">
+        <span style="display: grid; place-items: center; flex-shrink: 0;"><ds-icon glyph="{{ item.glyph }}" size="18.5" sw="1.65"></ds-icon></span>
+        <span data-lbl style="white-space: nowrap; transition: opacity .15s; flex: 1; text-align: left;">{{ item.label }}</span>
+        <sc-if value="{{ item.hasBadge }}"><span data-lbl style="font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 20px; background: var(--accent-subtle); color: var(--accent-text);">{{ item.badge }}</span></sc-if>
+      </button>
+    </sc-for>
+  </nav>
+  <sc-if value="{{ hasFooter }}">
+    <div style="padding: 12px; border-top: 1px solid var(--border);">
+      <div data-navitem style="display: flex; align-items: center; gap: 11px; height: 42px; padding: 0 11px; border-radius: 9px;">
+        <span style="width: 30px; height: 30px; border-radius: 50%; background: var(--accent-subtle); color: var(--accent-text); display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0;">{{ userInitial }}</span>
+        <span data-lbl style="flex: 1; min-width: 0; white-space: nowrap;"><span style="display: block; font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.3;">{{ userName }}</span><span style="display: block; font-size: 11.5px; color: var(--text-3); line-height: 1.3;">{{ userRole }}</span></span>
+      </div>
+    </div>
+  </sc-if>
+</aside>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 250, &quot;height&quot;: 520}, &quot;brand&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;Frame&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;brandGlyph&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;layers&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;section&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;워크스페이스&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;items&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;object[]&quot;}, &quot;active&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;collapsed&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;showUser&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;userName&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;김서연&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;userRole&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;관리자&quot;, &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { active: null };
+  renderVals() {
+    const p = this.props;
+    const collapsed = p.collapsed === true || p.collapsed === 'true';
+    const items = p.items || [];
+    const active = this.state.active == null ? (p.active ?? (items[0] && (items[0].id || items[0].label))) : this.state.active;
+    return {
+      collapsed: collapsed ? 'true' : 'false',
+      asideStyle: `flex-shrink: 0; width: ${collapsed ? 76 : 250}px; background: var(--bg-surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; transition: width .2s ease; font-family: 'IBM Plex Sans KR', sans-serif;`,
+      brand: p.brand ?? 'Frame',
+      brandGlyph: p.brandGlyph ?? 'layers',
+      hasSection: !!p.section && !collapsed,
+      section: p.section ?? '',
+      navView: items.map(it => {
+        const key = it.id || it.label;
+        const on = key === active;
+        return {
+          label: it.label, glyph: it.glyph || 'box',
+          hasBadge: it.badge != null, badge: it.badge,
+          style: `display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 11px; border-radius: 9px; border: none; cursor: pointer; font-size: 13.5px; font-family: inherit; font-weight: ${on ? 600 : 500}; background: ${on ? 'var(--accent-subtle)' : 'transparent'}; color: ${on ? 'var(--accent-text)' : 'var(--text-2)'}; transition: color .13s;`,
+          hover: on ? 'background: var(--accent-subtle);' : 'background: var(--bg-subtle); color: var(--text-1);',
+          onClick: () => { this.setState({ active: key }); if (p.onNavigate) p.onNavigate(key); },
+        };
+      }),
+      hasFooter: p.showUser !== false && p.showUser !== 'false',
+      userInitial: (p.userName ?? '김서연').slice(0, 1),
+      userName: p.userName ?? '김서연',
+      userRole: p.userRole ?? '관리자',
+    };
+  }
+}
+</script>
+</body>
+</html>

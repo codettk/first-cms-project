@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; }
+  doc-page .muted { color: #6b7080; }
+  doc-page .mvp { color: #2c6e49; font-weight: 700; }
+  doc-page .ext { color: #6b7080; font-weight: 600; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Workflow Implementation Roadmap</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>Frame CMS/MAM Workflow Implementation Roadmap</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">워크플로우 구현 로드맵 — 설계 문서 v1.1 세트 기반 구현 실행 계획</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 연관: WBS &amp; Milestone Plan · MVP Scope &amp; Git Strategy</p>
+
+  <h2>1. 전체 구현 전략</h2>
+  <ul>
+    <li><b>기반 → 엔진 → 파이프라인 → 운영 도구</b> 순서 — 하위 계층(DB·상태 기계)이 검증되기 전에 상위 계층을 올리지 않는다.</li>
+    <li><b>MVP 우선</b>: VIDEO 최소 파이프라인(UPLOAD → TM → VERIFY → MA → TC → CA → INDEX → PUBLISH → CLEANUP)을 end-to-end로 먼저 완성하고, IMAGE/AUDIO/DOC·확장 기능은 그 뒤에 얹는다.</li>
+    <li><b>계약 고정</b>: 설계 문서 v1.1(수정 지시서 반영 완료)이 단일 기준 — 구현 중 설계 변경은 문서 수정 → 코드 순서로만.</li>
+    <li>각 단계는 <b>완료 기준(DoD) 충족 + 테스트 통과</b> 후에만 다음 단계로 진행.</li>
+    <li><b>번호 체계 기준</b>: 본 Roadmap의 Phase는 기존 12단계 구현 순서표를 <b>실행 관점에서 재그룹화</b>한 것이다. 세부 작업 기준은 WBS를 우선하고, 전체 흐름과 의존성 기준은 Roadmap을 우선한다.</li>
+  </ul>
+  <pre>Phase 1 기반        Phase 2 엔진         Phase 3 파이프라인       Phase 4 운영
+DB·Seed·Model  →   StateMachine·        Storage·Profile·     →  Admin API·UI·
+                   Instance생성·         Job Handler(MVP→미디어    테스트·Runbook 검증·
+                   Scheduler·Worker기반   →문서)                   운영 준비
+      M1                M2                    M3                  M4·M5  →  M6 확장</pre>
+
+  <h2>2. 단계별 로드맵</h2>
+
+  <h3>Phase 0 — 문서 확정 <span class="mvp">[MVP]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>설계 문서 v1.1을 구현 기준으로 동결</td></tr>
+    <tr><td>주요 작업</td><td>수정 지시서 반영 확인(완료) · OpenAPI 골격 → openapi.yaml 실파일 생성 · 팀 리뷰</td></tr>
+    <tr><td>선행 조건</td><td>없음</td></tr>
+    <tr><td>완료 기준</td><td>전 문서 v1.1 태깅 · openapi.yaml spectral lint 통과 · 팀 승인</td></tr>
+    <tr><td>산출물</td><td>동결된 문서 세트 · openapi.yaml</td></tr>
+    <tr><td>위험 요소</td><td>구현 중 설계 재변경 — 변경은 문서 선행 원칙으로 통제</td></tr>
+  </table>
+
+  <h3>Phase 1 — DB / Migration / Seed + Model <span class="mvp">[MVP]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>17개 테이블·제약·인덱스·trigger·seed를 코드화 — 시스템의 단일 진실 원천 구축</td></tr>
+    <tr><td>주요 작업</td><td>enums → migrations(§순서 18단계) → CHECK/partial index/trigger → allowed_transitions·template·profile seed → Model/cast/relation/factory</td></tr>
+    <tr><td>선행 조건</td><td>Phase 0</td></tr>
+    <tr><td>완료 기준</td><td>migrate:fresh + seed 무오류 · Migration Spec §15 테스트 11항목 통과(전이 trigger·DELETED 가드·append-only 포함)</td></tr>
+    <tr><td>산출물</td><td>migrations · seeders · Models · factories · 스키마 테스트</td></tr>
+    <tr><td>위험 요소</td><td>trigger/enum/seed 3곳 전이표 불일치 — 일치 테스트를 CI에 먼저 넣는다</td></tr>
+  </table>
+
+  <h3>Phase 2 — StateMachine + Workflow 생성 <span class="mvp">[MVP]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>모든 상태 변경의 유일한 관문 확립 + 템플릿 기반 인스턴스/job/dependency 생성</td></tr>
+    <tr><td>주요 작업</td><td>AbstractStateMachine + 5종 구현(CAS·history, 내부 트랜잭션 없음) · TransitionRunner · WorkflowInstanceFactory(템플릿 → jobs+dependencies, DAG 사이클 검증)</td></tr>
+    <tr><td>선행 조건</td><td>Phase 1</td></tr>
+    <tr><td>완료 기준</td><td>허용/금지 전이 전수 테스트 · CAS 충돌 시나리오 테스트 · VIDEO 템플릿 인스턴스화 시 8개 job·의존 생성 검증</td></tr>
+    <tr><td>산출물</td><td>StateMachine 5종 · 인스턴스 생성 서비스 · 전이 테스트</td></tr>
+    <tr><td>위험 요소</td><td>상태 변경 우회 코드 유입 — arch 테스트($fillable 제외·직접 update 금지)로 차단</td></tr>
+  </table>
+
+  <h3>Phase 3 — Scheduler + Worker 기반 <span class="mvp">[MVP]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>큐 오케스트레이션(READY 전환·타임아웃·Lock 회수)과 Worker 공통 루프(Claim·heartbeat·fencing) 완성</td></tr>
+    <tr><td>주요 작업</td><td>Scheduler 데몬 7단계 틱(advisory lock) · JobClaimService(SKIP LOCKED) · JobLockService(lease·연장·회수) · AbstractWorker 루프 · WorkerAgentService · graceful shutdown</td></tr>
+    <tr><td>선행 조건</td><td>Phase 2</td></tr>
+    <tr><td>완료 기준</td><td>동시 Claim 이중 실행 0건 · lease 만료 자동 회수 → RETRY · fencing으로 늦은 결과 폐기 · SIGTERM drain 테스트 통과</td></tr>
+    <tr><td>산출물</td><td>workflow:scheduler / workflow:worker 커맨드 · supervisor 설정 · 동시성 테스트</td></tr>
+    <tr><td>위험 요소</td><td>동시성 버그는 재현 어려움 — N-Worker 통합 테스트를 이 단계에서 확보(뒤로 미루지 않음)</td></tr>
+  </table>
+
+  <h3>Phase 4 — Storage / Rendition / Profile <span class="mvp">[MVP]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>산출물 저장 계층 — zone 경로 해석·atomic rename·MASTER 보호·rendition upsert·프로파일 컴파일</td></tr>
+    <tr><td>주요 작업</td><td>MediaStorageService(.tmp → rename, assertNotMasterMutation) · RenditionService(variant_key 포함 upsert) · ProfileCompiler(params → 도구 인자)</td></tr>
+    <tr><td>선행 조건</td><td>Phase 1 (Phase 3과 병행 가능)</td></tr>
+    <tr><td>완료 기준</td><td>upsert 3종 키 테스트 · MASTER 변조 시도 차단 테스트 · 비활성 프로파일 거부</td></tr>
+    <tr><td>산출물</td><td>Storage/Rendition/Profile 서비스 + 테스트</td></tr>
+    <tr><td>위험 요소</td><td>스토리지 마운트 구성이 늦어지면 통합 테스트 지연 — DevOps 선행 협의</td></tr>
+  </table>
+
+  <h3>Phase 5 — Job Handler <span class="mvp">[MVP: TM·VERIFY·MA·TC·CA·INDEX·PUBLISH·CLEANUP]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>VIDEO 파이프라인 end-to-end 완성</td></tr>
+    <tr><td>주요 작업</td><td>1차: TM·VERIFY·MA·PUBLISH·CLEANUP(외부 도구 少) → 2차: TC(ffmpeg+진행률)·CA·INDEX → <span class="ext">3차(M6): IMAGE_TC·AUDIO_TC·DOC_PREVIEW·TEXT_EXTRACT·OCR</span></td></tr>
+    <tr><td>선행 조건</td><td>Phase 3 + 4</td></tr>
+    <tr><td>완료 기준</td><td>영상 1건 업로드 → READY 자동 전환(MVP 성공 시나리오) · 실패 유형별 RETRY/FAILED 분기 테스트 · TC 진행률 표시</td></tr>
+    <tr><td>산출물</td><td>Handler 8종 · FailReasonCatalog · 파이프라인 통합 테스트</td></tr>
+    <tr><td>위험 요소</td><td>ffmpeg 환경 편차 — 도구 버전 고정 이미지 선행 준비(폐쇄망). <b>INDEX 일정 리스크</b>: INDEX는 MVP 필수 job으로 유지(INDEX 성공 후 PUBLISH 진행)하되, 검색엔진 연동·폐쇄망 검증 지연 가능성이 있으므로 M3 게이트 전에 연결·mapping·upsert·조회 검증을 선행 확인한다. Mock INDEX는 개발 환경 테스트용으로만 허용 — 운영 MVP 게이트는 실제 INDEX 성공 기준</td></tr>
+  </table>
+
+  <h3>Phase 6 — Admin API <span class="mvp">[MVP: 조회 + 재시도·감사]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>운영 조회·조작 API — OpenAPI 계약 준수</td></tr>
+    <tr><td>주요 작업</td><td>Query API(dashboard·contents·jobs·workers) → Command API(retry·cancel·release-lock·worker 관리) + AuditLogger + AvailableActionService · audit.context/write 미들웨어</td></tr>
+    <tr><td>선행 조건</td><td>Phase 2 (조회는 Phase 5와 병행 가능)</td></tr>
+    <tr><td>완료 기준</td><td>OpenAPI 계약 테스트(권한·스키마·에러) 통과 · 조작 API 전체 감사 로그 기록 · 409 상태 충돌 응답 검증</td></tr>
+    <tr><td>산출물</td><td>Controller·Service·Resource·FormRequest · 계약 테스트</td></tr>
+    <tr><td>위험 요소</td><td>available_actions 로직 분산 — 단일 서비스 원칙을 리뷰에서 강제</td></tr>
+  </table>
+
+  <h3>Phase 7 — Admin UI <span class="mvp">[MVP: 대시보드·목록·상세·재시도]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>운영 콘솔 — Admin UI Wireframe Spec 기준 (Frame CMS 디자인 시스템)</td></tr>
+    <tr><td>주요 작업</td><td>대시보드 → 콘텐츠 목록/상세(파이프라인 타임라인) → 실패 Job/재시도 → Worker 상태 → <span class="ext">(M6) 큐 현황·로그 상세 고도화</span></td></tr>
+    <tr><td>선행 조건</td><td>Phase 6 조회 API</td></tr>
+    <tr><td>완료 기준</td><td>MVP 4개 화면에서 운영 시나리오(실패 확인 → 사유 열람 → 재시도) 완주 · available_actions 기반 버튼 노출</td></tr>
+    <tr><td>산출물</td><td>Admin UI 화면 · E2E 시나리오 테스트</td></tr>
+    <tr><td>위험 요소</td><td>프론트가 자체 상태 판정 로직을 넣는 것 — 계약(actions 배열)만 사용</td></tr>
+  </table>
+
+  <h3>Phase 8 — 테스트 / 운영 준비 <span class="mvp">[MVP]</span></h3>
+  <table>
+    <tr><th style="width: 90px;">항목</th><th>내용</th></tr>
+    <tr><td>목적</td><td>운영 투입 판정</td></tr>
+    <tr><td>주요 작업</td><td>부하 테스트(동시 업로드 N건) · 장애 리허설(Runbook 시나리오 7종 — Worker kill·Storage 차단·Scheduler 정지) · 모니터링 지표·알림 연결 · 백업/복구 리허설</td></tr>
+    <tr><td>선행 조건</td><td>Phase 5·6·7</td></tr>
+    <tr><td>완료 기준</td><td>MVP 성공/테스트 시나리오 전체 통과 · Runbook 절차로 복구 성공 · 운영 지표 대시보드 가동</td></tr>
+    <tr><td>산출물</td><td>테스트 리포트 · 운영 체크리스트 · 배포 절차</td></tr>
+    <tr><td>위험 요소</td><td>장애 리허설 생략 유혹 — M5 게이트 조건으로 강제</td></tr>
+  </table>
+
+  <h3>Phase 9 — 확장 <span class="ext">[MVP 이후 · M6]</span></h3>
+  <p>IMAGE/AUDIO/DOC 파이프라인 → OCR·WAVEFORM·STT·AI_ANALYSIS → 다중 화질(480p/360p — unique 이미 variant_key 기반이라 스키마 변경 없음)·HLS → media_texts 분리 검토(P3). 우선순위는 운영 수요 기준으로 재조정.</p>
+
+  <h2>3. 의존 관계 요약</h2>
+  <pre>P0 문서 ─► P1 DB/Model ─► P2 StateMachine/생성 ─► P3 Scheduler/Worker ─┐
+                    │                                                  ├─► P5 Handlers ─► P8 테스트/운영 ─► P9 확장
+                    └────────► P4 Storage/Profile ────────────────────┘
+P2 ─► P6 Admin API(조회는 P5와 병행) ─► P7 Admin UI ──────────────────► P8</pre>
+
+  <h2>4. 위험 관리 총괄</h2>
+  <table>
+    <tr><th style="width: 210px;">위험</th><th>완화</th></tr>
+    <tr><td>동시성 버그(이중 실행·lease)</td><td>Phase 3에서 N-Worker 통합 테스트 선확보 — 이후 회귀 스위트로 유지</td></tr>
+    <tr><td>전이표 3곳(enum·seed·trigger) 불일치</td><td>일치 검증 테스트를 CI 필수 게이트로</td></tr>
+    <tr><td>외부 도구 환경 편차(폐쇄망)</td><td>도구 버전 고정 이미지 Phase 4 전 확정 (DevOps)</td></tr>
+    <tr><td>설계-코드 드리프트</td><td>OpenAPI 계약 테스트 + 문서 선행 변경 원칙</td></tr>
+    <tr><td>TC 처리량 병목</td><td>M3에서 처리 시간 벤치마크 → M5 부하 테스트에 용량 계획 반영</td></tr>
+  </table>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Project Execution Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

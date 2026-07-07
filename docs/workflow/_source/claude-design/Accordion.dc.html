@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --border: oklch(0.918 0.004 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --border: oklch(0.29 0.007 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+  }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 4px 20px; font-family: 'IBM Plex Sans KR', sans-serif;">
+  <sc-for list="{{ items }}" as="it" hint-placeholder-count="3">
+    <div style="{{ it.wrapStyle }}">
+      <button onClick="{{ it.onClick }}" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 15px 0; background: none; border: none; cursor: pointer; text-align: left; font-family: inherit;">
+        <span style="font-size: 13.5px; font-weight: 500; color: var(--text-1);">{{ it.q }}</span>
+        <span style="{{ it.chevStyle }}"><ds-icon glyph="chevronDown" size="18"></ds-icon></span>
+      </button>
+      <div style="{{ it.bodyStyle }}"><div style="font-size: 13px; color: var(--text-2); line-height: 1.65; padding-bottom: 15px;">{{ it.a }}</div></div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 460, &quot;height&quot;: 220}, &quot;items&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;object[]&quot;}, &quot;multi&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;defaultOpen&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;0&quot;, &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { open: null };
+  renderVals() {
+    const p = this.props;
+    const items = p.items || [];
+    const multi = p.multi === true || p.multi === 'true';
+    const openState = this.state.open == null ? (p.defaultOpen != null ? [String(p.defaultOpen)] : []) : this.state.open;
+    const isOpen = (k) => openState.includes(k);
+    const toggle = (k) => {
+      let next;
+      if (multi) next = isOpen(k) ? openState.filter(x => x !== k) : [...openState, k];
+      else next = isOpen(k) ? [] : [k];
+      this.setState({ open: next });
+    };
+    return {
+      items: items.map((it, i) => {
+        const k = String(it.id != null ? it.id : i);
+        const open = isOpen(k);
+        return {
+          q: it.q, a: it.a,
+          wrapStyle: `border-bottom: ${i < items.length - 1 ? '1px solid var(--border)' : 'none'};`,
+          chevStyle: `display: flex; color: var(--text-3); transition: transform .2s ease; transform: rotate(${open ? '180deg' : '0deg'});`,
+          bodyStyle: `overflow: hidden; transition: max-height .22s ease, opacity .22s ease; max-height: ${open ? '260px' : '0'}; opacity: ${open ? '1' : '0'};`,
+          onClick: () => toggle(k),
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

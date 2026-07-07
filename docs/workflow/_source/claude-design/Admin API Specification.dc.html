@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; }
+  doc-page .muted { color: #6b7080; }
+  doc-page .method { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 1px 7px; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Workflow Admin API Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Workflow Admin API Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">워크플로우 관리자 API 상세 명세서 — Laravel + PostgreSQL, 관리자 권한 기반</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: DB Table Spec · Queue &amp; Worker Spec · State Machine Spec · Admin UI Wireframe Spec (각 v1.0)</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>본 문서는 관리자 화면 9개가 사용하는 API의 요청 파라미터·응답 스키마·권한·상태 전이 조건·에러 코드·감사 로그 기준을 정의한다. 이 API군은 단순 조회가 아니라 <b>운영 행위(재시도·취소·Lock 회수·Worker 관리·재처리)를 안전하게 수행하기 위한 관리자 전용 API</b>다. 모든 조작 API는 ① StateMachine 서비스 경유 상태 변경 ② 감사 로그 기록을 전제로 하며, 이를 우회하는 구현은 금지한다.</p>
+
+  <h2>2. 공통 API 정책</h2>
+  <table>
+    <tr><th style="width: 160px;">항목</th><th>정책</th></tr>
+    <tr><td>Base Path</td><td><code>/admin/workflows</code></td></tr>
+    <tr><td>인증</td><td>관리자 세션 또는 Bearer 토큰 (Laravel Sanctum) — 미인증 401</td></tr>
+    <tr><td>권한</td><td>permission 기반 미들웨어 (§3) — 권한 없음 403</td></tr>
+    <tr><td>응답 형식</td><td>JSON (UTF-8), <code>Content-Type: application/json</code></td></tr>
+    <tr><td>날짜/시간</td><td>ISO 8601 + UTC (<code>2026-07-04T10:02:07Z</code>). 화면 로컬 변환은 프론트 책임</td></tr>
+    <tr><td>페이지네이션</td><td><code>?page=1&amp;per_page=50</code> (per_page 최대 200). 응답 <code>meta: {page, per_page, total, last_page}</code></td></tr>
+    <tr><td>정렬</td><td><code>?sort=-created_at,priority</code> — 콤마 구분, <code>-</code> 접두 = 내림차순. 허용 필드는 API별 화이트리스트</td></tr>
+    <tr><td>필터</td><td>쿼리 파라미터. 다중값은 콤마(<code>status=FAILED,TIMEOUT</code>)</td></tr>
+    <tr><td>HTTP 상태</td><td>401 미인증 · 403 권한 없음 · 404 대상 없음 · 409 상태 기계 충돌 · 422 검증 오류 · 500 서버 오류</td></tr>
+    <tr><td>감사 로그</td><td>모든 POST/PATCH/DELETE는 감사 로그 미들웨어 경유 (§22)</td></tr>
+    <tr><td>멱등성</td><td>조작 API는 <code>Idempotency-Key</code> 헤더 지원(선택) — 동일 키 재요청은 첫 결과 반환</td></tr>
+  </table>
+
+  <h2>3. 권한 정책</h2>
+  <table>
+    <tr><th style="width: 190px;">권한</th><th>대상 API</th></tr>
+    <tr><td><code>workflow.view</code></td><td>모든 GET (dashboard, contents, jobs 목록, workers, alerts)</td></tr>
+    <tr><td><code>workflow.logs.view</code></td><td>GET jobs/{id} (로그·payload 포함 상세)</td></tr>
+    <tr><td><code>workflow.retry</code></td><td>jobs retry, jobs priority</td></tr>
+    <tr><td><code>workflow.cancel</code></td><td>jobs cancel, contents cancel</td></tr>
+    <tr><td><code>workflow.reprocess</code></td><td>contents reprocess</td></tr>
+    <tr><td><code>workflow.release_lock</code></td><td>jobs release-lock (HIGH)</td></tr>
+    <tr><td><code>workflow.worker.manage</code></td><td>workers disable/enable/clear-error (HIGH)</td></tr>
+    <tr><td><code>workflow.force_publish</code></td><td>비상용 강제 게시 (기본 미부여, 본 문서 범위 외 별도 명세)</td></tr>
+    <tr><td><code>content.master.download</code></td><td>원본 다운로드 요청 API (별도 — §8 참고)</td></tr>
+  </table>
+  <p class="muted">조회와 조작 권한 분리. HIGH 권한은 역할에 기본 포함하지 않고 개별 부여한다. 모든 조작 권한은 <code>workflow.view</code>를 전제한다.</p>
+
+  <h2>4. 공통 응답 / 에러 구조</h2>
+  <pre>// 성공
+{ "success": true,
+  "data": { … },
+  "meta": { "page": 1, "per_page": 50, "total": 1204, "last_page": 25 } }
+
+// 실패
+{ "success": false,
+  "error": {
+    "code": "INVALID_STATE_TRANSITION",
+    "message": "현재 상태에서는 해당 작업을 수행할 수 없습니다.",
+    "details": { "attempted": "FAILED→RETRY" },
+    "current_state": "SUCCESS",
+    "allowed_actions": [] } }</pre>
+  <table>
+    <tr><th style="width: 250px;">공통 에러 코드</th><th style="width: 60px;">HTTP</th><th>의미</th></tr>
+    <tr><td><code>UNAUTHORIZED</code></td><td>401</td><td>미인증</td></tr>
+    <tr><td><code>FORBIDDEN</code> / <code>PERMISSION_DENIED</code></td><td>403</td><td>권한 없음</td></tr>
+    <tr><td><code>NOT_FOUND</code></td><td>404</td><td>대상 리소스 없음</td></tr>
+    <tr><td><code>VALIDATION_ERROR</code></td><td>422</td><td>파라미터 검증 실패 (details에 필드별 메시지)</td></tr>
+    <tr><td><code>INVALID_STATE_TRANSITION</code></td><td>409</td><td>상태 기계 전이 불가 — current_state 포함</td></tr>
+    <tr><td><code>JOB_ALREADY_RUNNING</code></td><td>409</td><td>이미 실행 중인 job에 대한 중복 조작</td></tr>
+    <tr><td><code>JOB_LOCK_NOT_FOUND</code></td><td>409</td><td>lock이 존재하지 않음 (이미 회수/완료)</td></tr>
+    <tr><td><code>WORKER_OFFLINE</code> / <code>WORKER_DISABLED</code></td><td>409</td><td>Worker 상태 제약</td></tr>
+    <tr><td><code>CONTENT_NOT_PROCESSING</code></td><td>409</td><td>PROCESSING 아님 (취소 불가)</td></tr>
+    <tr><td><code>REQUIRED_RENDITION_MISSING</code></td><td>409</td><td>필수 산출물 누락 (PUBLISH 계열)</td></tr>
+    <tr><td><code>INTERNAL_ERROR</code></td><td>500</td><td>서버 오류 — trace_id 포함</td></tr>
+  </table>
+
+  <h2>5. API 목록 요약</h2>
+  <table>
+    <tr><th style="width: 60px;">Method</th><th style="width: 280px;">Path</th><th>목적</th><th style="width: 150px;">권한</th></tr>
+    <tr><td>GET</td><td><code>/dashboard</code></td><td>대시보드 집계</td><td>view</td></tr>
+    <tr><td>GET</td><td><code>/contents</code></td><td>콘텐츠 처리 목록</td><td>view</td></tr>
+    <tr><td>GET</td><td><code>/contents/{id}</code></td><td>콘텐츠 처리 상세</td><td>view</td></tr>
+    <tr><td>POST</td><td><code>/contents/{id}/reprocess</code></td><td>재처리 (새 인스턴스)</td><td>reprocess</td></tr>
+    <tr><td>POST</td><td><code>/contents/{id}/cancel</code></td><td>워크플로우 취소</td><td>cancel</td></tr>
+    <tr><td>GET</td><td><code>/jobs</code></td><td>job 목록 (큐/실행/실패 공용)</td><td>view</td></tr>
+    <tr><td>GET</td><td><code>/jobs/{id}</code></td><td>job 상세 + 로그</td><td>logs.view</td></tr>
+    <tr><td>POST</td><td><code>/jobs/{id}/retry</code></td><td>FAILED→RETRY</td><td>retry</td></tr>
+    <tr><td>POST</td><td><code>/jobs/{id}/cancel</code></td><td>job 취소</td><td>cancel</td></tr>
+    <tr><td>POST</td><td><code>/jobs/{id}/release-lock</code></td><td>Lock 강제 회수</td><td>release_lock</td></tr>
+    <tr><td>PATCH</td><td><code>/jobs/{id}/priority</code></td><td>우선순위 변경</td><td>retry</td></tr>
+    <tr><td>GET</td><td><code>/workers</code></td><td>Worker 목록</td><td>view</td></tr>
+    <tr><td>POST</td><td><code>/workers/{id}/disable</code> · <code>/enable</code> · <code>/clear-error</code></td><td>Worker 관리</td><td>worker.manage</td></tr>
+    <tr><td>GET / POST</td><td><code>/alerts</code> · <code>/alerts/{id}/ack</code></td><td>알림 목록·확인</td><td>view</td></tr>
+  </table>
+
+  <h2>6. 대시보드 API</h2>
+  <p><span class="method" style="background:#e3ecdf;color:#2c6e49;">GET</span> <code>/admin/workflows/dashboard</code> — 파라미터: <code>range</code>(1h|24h|7d, 기본 24h) · <code>media_type</code> · <code>refresh</code>(true = 캐시 무시; 기본은 10초 캐시).</p>
+  <pre>{ "success": true, "data": {
+  "contents": { "PROCESSING": 12, "READY": 1204, "FAILED": 3 },
+  "jobs": { "WAITING": 24, "READY": 8, "RUNNING": 5, "RETRY": 2, "FAILED": 4, "TIMEOUT": 0 },
+  "workers": { "ONLINE": 6, "BUSY": 3, "OFFLINE": 1, "DISABLED": 0, "ERROR": 0 },
+  "queue": { "tc_queue_length": 14, "max_wait_sec": 620 },
+  "metrics": { "avg_processing_sec": 252, "p95_processing_sec": 1080,
+               "failure_rate": 0.012, "retry_rate": 0.043, "throughput_1h": 132 },
+  "throughput_24h": [ { "hour": "2026-07-04T09:00:00Z", "success": 128, "failed": 2 }, … ],
+  "banners": [ { "severity": "HIGH", "event_type": "WORKER_OFFLINE",
+                 "message": "tc-worker-02 연결 끊김 (2분 전)",
+                 "action_link": "/admin/workflows/workers?status=OFFLINE" } ]
+} }</pre>
+
+  <h2>7. 콘텐츠 처리 목록 API</h2>
+  <p><span class="method" style="background:#e3ecdf;color:#2c6e49;">GET</span> <code>/admin/workflows/contents</code> — 필터: <code>status</code> · <code>media_type</code> · <code>failed_only</code> · <code>date_from/date_to</code> · <code>uploaded_by</code> · <code>current_job_type</code> · <code>worker_type</code> · <code>keyword</code>(제목/파일명/uuid) · <code>page/per_page/sort</code>(기본 <code>-updated_at</code>).</p>
+  <pre>{ "success": true, "data": [ {
+  "content_id": 1001, "uuid": "a1b2…", "title": "video_001",
+  "media_type": "VIDEO", "content_status": "PROCESSING",
+  "current_stage": { "job_type": "TC", "status": "RUNNING", "progress_percent": 62 },
+  "progress": { "done_required": 4, "total_required": 7 },
+  "has_failed_job": false, "has_proxy": true, "has_thumbnail": true,
+  "index_status": "PENDING", "publish_status": "WAITING",
+  "uploaded_by": { "id": 7, "name": "soyeon" },
+  "created_at": "2026-07-04T10:02:01Z", "updated_at": "2026-07-04T10:14:33Z",
+  "available_actions": ["view_detail","cancel","view_logs"]
+} ], "meta": { "page": 1, "per_page": 50, "total": 1219, "last_page": 25 } }</pre>
+  <p class="muted"><code>available_actions</code>는 서버가 상태 기계 + 호출자 권한 기준으로 계산 — 프론트는 이 배열만으로 버튼 노출을 결정한다(중복 판정 로직 금지).</p>
+
+  <h2>8. 콘텐츠 처리 상세 API</h2>
+  <p><span class="method" style="background:#e3ecdf;color:#2c6e49;">GET</span> <code>/admin/workflows/contents/{id}</code></p>
+  <pre>{ "success": true, "data": {
+  "content": { "content_id": 1001, "title": "video_001", "status": "PROCESSING", … },
+  "media_files": [ { "id": 5001, "original_filename": "video_001.mov",
+    "file_size": 8123456789, "checksum": "ab3f…", "detected_mime": "video/quicktime" } ],
+  "renditions": {
+    "master":   { "exists": true, "storage_zone": "MASTER",
+                  "path_masked": "master/2026/07/****_src.mov", "file_size": 8123456789 },
+    "proxy":    [ { "rendition_type": "PROXY_VIDEO", "width": 1280, "height": 720,
+                    "duration_ms": 734000, "preview_url": "/media/proxy/…" } ],
+    "thumbnail":[ … ], "catalog": [ … ], "document_preview": [ … ] },
+  "search_index": { "status": "PENDING", "index_version": 0, "indexed_at": null },
+  "workflow_instance": { "id": 7001, "template_code": "VIDEO_INGEST", "template_version": 3,
+                         "status": "RUNNING", "started_at": "2026-07-04T10:02:05Z" },
+  "job_pipeline": [ { "job_id": 90001, "job_type": "TM", "status": "SUCCESS",
+      "started_at": "…", "finished_at": "…", "elapsed_sec": 41,
+      "worker_name": "tm-w-01", "retry_count": 0, "progress_percent": 100,
+      "fail_reason_code": null }, … ],
+  "recent_histories": [ … 최근 20건 … ],
+  "recent_logs": [ … 최근 10건 (message 요약만) … ],
+  "available_actions": ["cancel","view_logs"]
+} }</pre>
+  <ul>
+    <li><b>Master 경로는 마스킹</b>(<code>path_masked</code>)해서만 제공 — 전체 경로·직접 URL은 어떤 응답에도 포함하지 않는다.</li>
+    <li>원본 다운로드는 별도 API <code>POST /admin/contents/{id}/master-download-request</code>(권한 <code>content.master.download</code>, reason 필수, 감사 로그) → 서명된 만료 URL 발급. 본 문서 범위 외 — 콘텐츠 API 명세에서 상세화.</li>
+  </ul>
+
+  <h2>9. 콘텐츠 재처리 API</h2>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/contents/{id}/reprocess</code></p>
+  <pre>// 요청
+{ "mode": "failed_from",            // failed_from | full
+  "reason": "TC 프로파일 변경 재처리", // 필수
+  "priority": 200,                   // 선택, 기본 200(수동 재처리)
+  "keep_existing_renditions": true,  // full 모드에서만 의미
+  "requested_job_type": null }       // 특정 job만 재실행 시 (예: "CA")
+
+// 응답 201
+{ "success": true, "data": {
+  "new_instance_id": 7002, "content_status": "PROCESSING",
+  "created_jobs": [ { "job_id": 90101, "job_type": "TC", "status": "READY" }, … ] } }</pre>
+  <table>
+    <tr><th style="width: 240px;">정책</th><th>내용</th></tr>
+    <tr><td>가능 상태</td><td>contents = READY 또는 FAILED. DELETED는 <code>CONTENT_DELETED</code>(409), PROCESSING은 <code>INVALID_STATE_TRANSITION</code>(409 — 기존 취소 후 재처리 안내)</td></tr>
+    <tr><td>인스턴스</td><td>기존 인스턴스는 되살리지 않음 — 항상 새 workflow_instance 생성. <code>failed_from</code>은 성공 job의 결과를 재사용하고 실패 지점 이후만 job 생성</td></tr>
+    <tr><td>이력</td><td>기존 logs/histories 전부 보존</td></tr>
+    <tr><td>감사</td><td>reason 필수, 감사 로그 기록</td></tr>
+  </table>
+
+  <h2>10. 콘텐츠 취소 API</h2>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/contents/{id}/cancel</code> — body: <code>{ "reason": "잘못된 파일 업로드" }</code> (필수)</p>
+  <ul>
+    <li>contents = PROCESSING에서만 가능 — 아니면 <code>CONTENT_NOT_PROCESSING</code>(409).</li>
+    <li>단일 트랜잭션: WAITING/READY/RETRY job → CANCELED, RUNNING job → <code>cancel_requested_at</code> 마킹(Worker 미응답 30초 시 Scheduler 강제 CANCELED), instance → CANCELED, contents → FAILED가 아닌 <b>REGISTERED로 회귀시키지 않고 FAILED 처리 여부는 정책 플래그</b> — 기본은 contents=FAILED(note=canceled).</li>
+    <li>응답: 취소된 job 수, cancel_requested job 수.</li>
+  </ul>
+
+  <h2>11. Job 목록 API</h2>
+  <p><span class="method" style="background:#e3ecdf;color:#2c6e49;">GET</span> <code>/admin/workflows/jobs</code> — 필터: <code>status</code> · <code>job_type</code> · <code>content_id</code> · <code>worker_id</code> · <code>worker_type</code> · <code>priority_min/max</code> · <code>retry_count_min</code> · <code>is_required</code> · <code>failed_only</code> · <code>timeout_imminent</code>(경과 &gt; timeout×0.8) · <code>date_from/to</code> · <code>page/per_page/sort</code>.</p>
+  <pre>{ "success": true, "data": [ {
+  "job_id": 90007, "content_id": 1001, "content_title": "video_001",
+  "job_type": "TC", "status": "RUNNING", "is_required": true,
+  "priority": 100, "retry_count": 0, "max_retry": 2, "next_attempt_at": null,
+  "worker": { "id": 3, "name": "tc-w-01" },
+  "progress": { "percent": 62, "message": "transcoding 00:12:30/00:41:00",
+                "estimated_remaining_sec": 540, "updated_at": "…" },
+  "started_at": "2026-07-04T10:02:07Z", "finished_at": null,
+  "elapsed_sec": 750, "timeout_sec": 7380, "timeout_imminent": false,
+  "locked_until": "2026-07-04T10:24:37Z", "heartbeat_at": "2026-07-04T10:14:35Z",
+  "fail_reason_code": null, "fail_message": null,
+  "available_actions": ["view_logs","cancel","release_lock"]
+} ], "meta": { … } }</pre>
+  <p><b>화면별 재사용</b>: Job 큐 = <code>?status=READY,RETRY&amp;sort=-priority,created_at</code> · RUNNING = <code>?status=RUNNING&amp;sort=started_at</code> · 실패 = <code>?status=FAILED,TIMEOUT&amp;sort=-finished_at</code>. 화면은 같은 응답 스키마에서 필요한 컬럼만 선택 렌더링한다 — 별도 API 없음.</p>
+
+  <h2>12. Job 상세 API</h2>
+  <p><span class="method" style="background:#e3ecdf;color:#2c6e49;">GET</span> <code>/admin/workflows/jobs/{id}</code> — 권한 <code>workflow.logs.view</code></p>
+  <pre>{ "success": true, "data": {
+  "job": { "job_id": 90007, "job_type": "TC", "status": "RUNNING", "is_required": true,
+           "retry_count": 0, "max_retry": 2, "priority": 100, "timeout_sec": 7380 },
+  "content": { "content_id": 1001, "title": "video_001", "status": "PROCESSING" },
+  "instance": { "id": 7001, "template_code": "VIDEO_INGEST", "version": 3 },
+  "worker": { "id": 3, "name": "tc-w-01", "type": "TRANSCODE", "status": "BUSY" },
+  "payload": { "master_path_masked": "master/…/****_src.mov", "profile_id": 2 },
+  "result": null,
+  "histories": [                              // 상태 전이 타임라인 ("무슨 일")
+    { "from": null, "to": "WAITING", "actor": "system", "note": "created", "at": "…" },
+    { "from": "WAITING", "to": "READY", "actor": "scheduler", "note": null, "at": "…" },
+    { "from": "READY", "to": "RUNNING", "actor": "worker:3", "note": "claimed", "at": "…" } ],
+  "attempts": [                               // 실행 로그 ("왜 그랬나") — attempt 단위 그룹
+    { "attempt_no": 1,
+      "logs": [ { "level": "INFO", "command": "ffmpeg -i …", "message": "start",
+                  "stdout_url": "/admin/workflows/jobs/90007/logs/1/stdout",
+                  "stderr_url": "…", "detail": { "profile": "720p" }, "at": "…" } ] } ],
+  "progress": { "percent": 62, "message": "…", "updated_at": "…" },
+  "lock": { "locked_by_worker_id": 3, "locked_at": "…", "locked_until": "…", "heartbeat_at": "…" },
+  "generated_renditions": [],
+  "available_actions": ["cancel","release_lock"]
+} }</pre>
+  <p class="muted">stdout/stderr는 본문에 인라인하지 않고 별도 다운로드 URL — 대용량 대비. histories(상태)와 attempts.logs(실행)를 구조적으로 분리한다.</p>
+
+  <h2>13. Job 재시도 API</h2>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/jobs/{id}/retry</code></p>
+  <pre>// 요청
+{ "reason": "스토리지 복구 후 재시도",  // 단건 선택 / 일괄 필수
+  "reset_retry_count": true,           // 기본 true
+  "priority": 200 }                    // 선택
+
+// 응답
+{ "success": true, "data": {
+  "job_id": 90003, "status": "RETRY", "retry_count": 0,
+  "next_attempt_at": "2026-07-04T11:32:00Z" } }</pre>
+  <ul>
+    <li>FAILED에서만 가능 — SUCCESS/SKIPPED/CANCELED는 <code>INVALID_STATE_TRANSITION</code>(409), RUNNING은 <code>JOB_ALREADY_RUNNING</code>(409).</li>
+    <li>일괄 재시도: <code>POST /jobs/retry-batch</code> body <code>{ "job_ids": […], "reason": "…" }</code> — reason 필수, 응답에 건별 성공/실패 목록.</li>
+    <li>StateMachine 경유(FAILED→RETRY, actor=admin) · 기존 logs/histories 보존 · 감사 로그 기록.</li>
+  </ul>
+
+  <h2>14. Job 취소 API</h2>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/jobs/{id}/cancel</code> — body: <code>{ "reason": "…" }</code> (필수)</p>
+  <ul>
+    <li>WAITING/READY: 즉시 CANCELED + 후속 job SKIPPED(전파) — 응답에 skipped_job_ids 포함.</li>
+    <li>RUNNING: <code>cancel_requested_at</code> 마킹 → 202 Accepted 반환(<code>"state": "cancel_requested"</code>) → Worker 중단 시 CANCELED. 30초 미응답 시 Scheduler 강제 CANCELED + lock 회수.</li>
+    <li>종결 상태는 <code>INVALID_STATE_TRANSITION</code>(409).</li>
+  </ul>
+
+  <h2>15. Lock 강제 회수 API</h2>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/jobs/{id}/release-lock</code> — 권한 <code>workflow.release_lock</code> (HIGH)</p>
+  <pre>// 요청
+{ "reason": "worker 응답 없음, 인프라 확인 완료",  // 필수
+  "target_status": "RETRY" }                      // RETRY(기본) | FAILED
+
+// 응답
+{ "success": true, "data": { "job_id": 90007, "status": "RETRY",
+  "released_lock": { "was_locked_by": 3, "locked_since": "…" } } }</pre>
+  <table>
+    <tr><th style="width: 240px;">에러 케이스</th><th>코드 / 처리</th></tr>
+    <tr><td>lock 없음</td><td><code>JOB_LOCK_NOT_FOUND</code>(409) — 이미 회수·완료됨. current_state 반환</td></tr>
+    <tr><td>job이 RUNNING 아님</td><td><code>JOB_NOT_RUNNING</code>(409)</td></tr>
+    <tr><td>Worker가 직전에 완료</td><td>CAS 충돌 → <code>INVALID_STATE_TRANSITION</code>(409) + current_state=SUCCESS — UI는 재조회 안내</td></tr>
+    <tr><td>동시 회수 경합</td><td>트랜잭션 내 lock 행 <code>FOR UPDATE</code> — 후행 요청은 <code>JOB_LOCK_NOT_FOUND</code></td></tr>
+  </table>
+  <p class="muted">회수 후 늦게 도착하는 Worker 결과는 lease fencing(<code>worker_id</code> CAS)으로 자동 폐기된다. UI 모달에는 이 사실과 함께 job_id 타이핑 확인을 요구한다.</p>
+
+  <h2>16. Job 우선순위 변경 API</h2>
+  <p><span class="method" style="background:#f2ead9;color:#8a6d1a;">PATCH</span> <code>/admin/workflows/jobs/{id}/priority</code> — body: <code>{ "priority": 300, "reason": null }</code></p>
+  <ul>
+    <li>가능 상태: WAITING/READY/RETRY. RUNNING/종결 상태는 <code>INVALID_STATE_TRANSITION</code>(409).</li>
+    <li>priority 범위: 0~1000 (기본 100 / 재색인 50 / 수동 200 / 긴급 300). 범위 외 422.</li>
+    <li>reason은 <b>선택</b> — 상태를 바꾸지 않는 LOW 위험 조작이므로 강제하지 않되 감사 로그에는 항상 기록.</li>
+  </ul>
+
+  <h2>17. Worker 목록 API</h2>
+  <p><span class="method" style="background:#e3ecdf;color:#2c6e49;">GET</span> <code>/admin/workflows/workers</code> — 필터: <code>status</code> · <code>worker_type</code> · <code>supported_job_type</code> · <code>heartbeat_delay_min</code>(초) · <code>gpu_available</code> · <code>keyword</code>(name/hostname).</p>
+  <pre>{ "success": true, "data": [ {
+  "worker_id": 3, "worker_name": "tc-w-01", "worker_type": "TRANSCODE",
+  "status": "BUSY", "supported_job_types": ["TC"],
+  "hostname": "media-node-01", "ip_address": "10.0.2.11",
+  "last_heartbeat_at": "2026-07-04T10:14:35Z", "heartbeat_delay_sec": 3,
+  "current_job": { "job_id": 90007, "job_type": "TC", "content_id": 1001 },
+  "max_concurrency": 2, "running_count": 1,
+  "gpu_available": true, "cpu_count": 16, "memory_limit_mb": 32768,
+  "version": "1.4.2",
+  "available_actions": ["disable","view_current_job","view_logs"]
+} ] }</pre>
+
+  <h2>18. Worker 비활성화 API</h2>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/workers/{id}/disable</code> — body: <code>{ "reason": "OS 패치", "drain": true }</code></p>
+  <ul>
+    <li>ONLINE/BUSY에서 가능. reason 필수.</li>
+    <li><code>drain=true</code>(기본): DISABLED 마킹 → 신규 Claim 중단, 진행 중 job은 완료까지 대기. 응답에 draining job 목록.</li>
+    <li><code>drain=false</code>: 진행 중 job에 cancel 신호 + 미응답 시 lock 회수(RETRY 재배정) — 위험도 HIGH 경고를 응답 meta에 포함, UI는 이중 확인.</li>
+  </ul>
+
+  <h2>19. Worker 재활성화 API</h2>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/workers/{id}/enable</code> — body: <code>{ "reason": null }</code> (선택)</p>
+  <ul>
+    <li>DISABLED에서만 가능 — 아니면 <code>WORKER_NOT_DISABLED</code>(409).</li>
+    <li>heartbeat 수신 중이어야 ONLINE 전환 — 90초 이상 미수신이면 <code>WORKER_HEARTBEAT_MISSING</code>(409, "프로세스 기동 확인 필요").</li>
+    <li>reason 선택(활성화는 LOW 위험) — 감사 로그는 기록.</li>
+  </ul>
+
+  <h2>20. Worker ERROR 해제 API</h2>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/workers/{id}/clear-error</code> — body: <code>{ "reason": "ffmpeg 크래시 원인 제거 확인" }</code> (필수)</p>
+  <ul>
+    <li>ERROR에서만 가능. ERROR→ONLINE, 자동 복귀 없음 — 운영자 확인이 전제.</li>
+    <li>reason 필수 + 감사 로그. 해제 직후 연속 실패 임계가 재발하면 다시 ERROR 전환(Worker 자체 판단).</li>
+  </ul>
+
+  <h2>21. 알림 목록 / 확인 API</h2>
+  <p><span class="method" style="background:#e3ecdf;color:#2c6e49;">GET</span> <code>/admin/workflows/alerts</code> — 필터: <code>severity</code> · <code>acknowledged</code> · <code>event_type</code> · <code>date_from/to</code>.</p>
+  <pre>{ "success": true, "data": [ {
+  "alert_id": 501, "severity": "HIGH", "event_type": "REQUIRED_JOB_FAILED",
+  "message": "video_001 TC 실패 — 콘텐츠 처리 중단",
+  "related_content_id": 1001, "related_job_id": 90007, "related_worker_id": 3,
+  "created_at": "…", "acknowledged_at": null, "acknowledged_by": null,
+  "action_link": "/admin/workflows/jobs/90007" } ] }</pre>
+  <p><span class="method" style="background:#dfe6f2;color:#3d5a9e;">POST</span> <code>/admin/workflows/alerts/{id}/ack</code> — body: <code>{ "note": "재시도 완료" }</code>. 이미 확인된 알림은 <b>멱등 성공</b>(200, 기존 acknowledged_at 반환). 감사 로그 기록.</p>
+
+  <h2>22. 감사 로그 정책</h2>
+  <p>전용 테이블 <code>admin_audit_logs</code>에 기록 (append-only):</p>
+  <table>
+    <tr><th style="width: 190px;">항목</th><th>내용</th></tr>
+    <tr><td>actor_user_id / ip_address / user_agent</td><td>요청자 식별</td></tr>
+    <tr><td>action</td><td><code>job.retry</code> / <code>job.cancel</code> / <code>job.release_lock</code> / <code>content.reprocess</code> / <code>worker.disable</code> … (라우트명 기반)</td></tr>
+    <tr><td>target_type / target_id</td><td>content / job / worker / alert</td></tr>
+    <tr><td>before_state / after_state</td><td>조작 전후 상태값</td></tr>
+    <tr><td>request_payload</td><td>body 전체 (민감 정보 없음 전제)</td></tr>
+    <tr><td>reason</td><td>사유 — <b>필수 대상</b>: 콘텐츠 재처리·취소, Job 취소, Lock 강제 회수, Worker 비활성화, ERROR 해제, 원본 다운로드 요청. 누락 시 422</td></tr>
+    <tr><td>created_at</td><td>UTC</td></tr>
+  </table>
+  <p class="muted">감사 로그 기록은 조작 트랜잭션과 동일 트랜잭션 — 기록 실패 시 조작도 롤백.</p>
+
+  <h2>23. 상태 기계 연동 정책</h2>
+  <ul>
+    <li>모든 조작 API는 <code>JobStateMachine</code>/<code>ContentStateMachine</code>/<code>WorkerStateMachine</code>을 경유 — Controller에서 직접 Eloquent update 금지.</li>
+    <li>전이 실패(CAS 0행 또는 전이표 거부) 시 <b>409</b> + <code>current_state</code> + <code>allowed_actions</code>(현재 상태·권한 기준 가능한 액션 배열) 반환 — UI는 이 값으로 화면을 즉시 갱신한다.</li>
+    <li>동시 조작 경합(두 관리자가 동시 재시도 등): 먼저 성공한 쪽만 반영, 나머지는 409 — 멱등 성격의 조작(이미 목표 상태)은 200으로 흡수.</li>
+  </ul>
+
+  <h2>24. API별 에러 코드</h2>
+  <table>
+    <tr><th style="width: 220px;">API</th><th>발생 가능 에러</th></tr>
+    <tr><td>contents/{id} 계열</td><td><code>CONTENT_NOT_FOUND</code> · <code>CONTENT_DELETED</code> · <code>CONTENT_NOT_PROCESSING</code>(cancel) · <code>INVALID_STATE_TRANSITION</code>(reprocess)</td></tr>
+    <tr><td>jobs/{id}/retry</td><td><code>JOB_NOT_FOUND</code> · <code>JOB_NOT_FAILED</code> · <code>JOB_ALREADY_RUNNING</code> · <code>INVALID_STATE_TRANSITION</code></td></tr>
+    <tr><td>jobs/{id}/cancel</td><td><code>JOB_NOT_FOUND</code> · <code>INVALID_STATE_TRANSITION</code>(종결 상태)</td></tr>
+    <tr><td>jobs/{id}/release-lock</td><td><code>JOB_LOCK_NOT_FOUND</code> · <code>JOB_NOT_RUNNING</code> · <code>INVALID_STATE_TRANSITION</code></td></tr>
+    <tr><td>jobs/{id}/priority</td><td><code>JOB_NOT_FOUND</code> · <code>INVALID_STATE_TRANSITION</code> · <code>VALIDATION_ERROR</code>(범위)</td></tr>
+    <tr><td>workers/{id} 계열</td><td><code>WORKER_NOT_FOUND</code> · <code>WORKER_NOT_DISABLED</code>(enable) · <code>WORKER_HEARTBEAT_MISSING</code>(enable) · <code>INVALID_STATE_TRANSITION</code></td></tr>
+    <tr><td>공통</td><td><code>PERMISSION_DENIED</code> · <code>VALIDATION_ERROR</code> · <code>INTERNAL_ERROR</code></td></tr>
+  </table>
+
+  <h2>25. Laravel Controller / Service 구조 제안</h2>
+  <pre>routes/admin.php
+  Route::prefix('admin/workflows')-&gt;middleware(['auth:admin','audit'])-&gt;group(…)
+
+app/Http/Controllers/Admin/Workflow/
+  DashboardController        (index)
+  ContentWorkflowController  (index, show, reprocess, cancel)
+  JobController              (index, show, retry, retryBatch, cancel, releaseLock, updatePriority)
+  WorkerController           (index, disable, enable, clearError)
+  AlertController            (index, ack)
+
+app/Services/Workflow/
+  WorkflowQueryService       // 목록·상세 조회 (available_actions 계산 포함)
+  WorkflowCommandService     // reprocess·cancel 오케스트레이션
+  JobStateMachine / ContentStateMachine / WorkerStateMachine
+  JobLockService             // release-lock
+  AuditLogger                // 미들웨어 + 트랜잭션 내 기록
+
+app/Http/Requests/Admin/Workflow/   // FormRequest per 조작 API (reason 검증)
+app/Http/Resources/Admin/Workflow/  // JsonResource per 응답 스키마</pre>
+  <p class="muted">available_actions 계산은 QueryService 한 곳에 집중 — 화면·API 간 버튼 노출 기준이 갈라지지 않게 한다.</p>
+
+  <h2>26. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>관리자 화면 하이파이 목업</b> — 본 API 응답 스키마를 데이터 계약으로 사용한 인터랙티브 프로토타입</li>
+    <li><b>OpenAPI(Swagger) 문서</b> — 본 명세의 기계 판독 버전</li>
+    <li><b>원본 다운로드 API 명세</b> — master-download-request 플로우 + 서명 URL 정책</li>
+    <li><b>Laravel 마이그레이션·시드 초안</b> — admin_audit_logs 포함</li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

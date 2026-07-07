@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 16px; font-weight: 700; letter-spacing: -0.015em; margin: 30px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page .muted { color: #6b7080; }
+  doc-page .p0 { color: #b23a3a; font-weight: 700; }
+  doc-page .p1 { color: #b25c1f; font-weight: 700; }
+  doc-page .p2 { color: #8a6d1a; font-weight: 700; }
+  doc-page .p3 { color: #6b7080; font-weight: 700; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — 기존 문서 수정 지시서 (최종 보완 체크리스트)</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>최종 보완 체크리스트 — 기존 문서 수정 지시서</h1>
+  <p class="muted" style="font-size: 13px;">문서 13종의 부분 수정 지시 기록. 우선순위: <span class="p0">P0</span> 구현 전 필수 · <span class="p1">P1</span> 구현 중 · <span class="p2">P2</span> 운영 전 · <span class="p3">P3</span> 장기.</p>
+  <div style="border: 1.5px solid #75a884; background: #eef5ef; border-radius: 10px; padding: 14px 18px; margin: 14px 0 6px;">
+    <p style="margin: 0 0 6px;"><b style="color: #2c6e49;">v1.1 — 반영 현황 (2026-07-04)</b></p>
+    <p style="margin: 0;">1차 패치로 항목 1~10의 P0·P1·P2 수정이 각 문서에 <b>전부 반영 완료</b>되었고, 2차 정합성 검토에서 발견된 잔여 2건(DB Table Spec §3 요약표에 progresses·audit_logs·allowed_transitions 누락 / Worker Agent §6 Claim 트랜잭션 소유 주석 누락)도 반영 완료. 2차 검토 확인 사항: COMMON은 transcode_profiles 전용(contents·OpenAPI MediaType 미포함) ✓ · DOCUMENT_INGEST 선행 [MA] ✓ · StateMachine 내부 트랜잭션 제거 ✓ · variant_key unique 3종 4개 문서 일치 ✓ · priority/progresses 확정 표기 ✓ · audit.context/write 분리 ✓ · OpenAPI $ref 잔존 0건 ✓ · retry-batch 라우트 선순위 ✓. <b>잔여 미결: P3 media_texts 분리 검토 1건.</b> 아래 표의 각 항목에 반영 상태를 병기했다.</p>
+  </div>
+
+  <h2>1. Workflow Job Type Definition v1.0</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>§1 문서 목적 뒤 · §3.8 DOC_PREVIEW · §3.9~3.10</td></tr>
+    <tr><td>수정 내용</td><td>① Workflow 계층(Template → Template Step → Instance → Job → Job History / Job Log) 구분 절 추가 ② media_files(업로드 원본 단위) vs media_renditions(Worker 산출물 단위) 역할 구분 명시 ③ DOC_PREVIEW 선행 작업을 "VERIFY = SUCCESS AND media_type = DOC"에서 <b>"MA = SUCCESS AND media_type = DOC"</b>로 수정 — 문서도 VERIFY → MA(media_type 확정) → DOCUMENT_INGEST 분기 흐름으로 통일 ④ histories(상태 전이) / logs(command·stdout·stderr·detail) 분리 원칙 명시</td></tr>
+    <tr><td>반영 이유</td><td>계층·분기 순서 오해 방지 — DOC_PREVIEW가 유형 판정 전에 실행되는 것처럼 읽힘</td></tr>
+    <tr><td>우선순위</td><td class="p0">P0</td></tr>
+    <tr><td>영향 문서</td><td>DB Table Spec §4.5 seed 흐름 · Migration &amp; Seed §10.2 DOCUMENT_INGEST depends_on(DOC_PREVIEW·TEXT_EXTRACT의 선행을 [VERIFY]→[MA]로)</td></tr>
+    <tr><td>반영 상태</td><td class="p3" style="color:#2c6e49;">✓ 반영 완료 — 계층/파일 구분 절 추가, 선행 [MA] 수정 (본문·seed 모두)</td></tr>
+  </table>
+
+  <h2>2. DB Table Specification v1.0</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>§4.3 media_renditions · §8 · §4.7 workflow_jobs</td></tr>
+    <tr><td>수정 내용</td><td>① storage_zone CHECK를 7종으로 확정: <code>TEMP·MASTER·PROXY·THUMBNAIL·CATALOG·DOCUMENT·ARCHIVE</code> (현행 5종 표기 수정) ② media_renditions에 <code>variant_key varchar(50) NOT NULL DEFAULT 'default'</code> 컬럼 추가 ③ §8 말미에 media_texts 분리 검토 절 추가(후보 컬럼: id·content_id·media_file_id·rendition_id?·text_type OCR|EXTRACTED|STT·page_no?·timecode_ms?·text·confidence?·lang?·metadata·created_at — 현행 파일 경로 저장 유지, 장기 검토) ④ workflow_jobs 컬럼 표에 <code>priority smallint NOT NULL DEFAULT 100</code>·<code>cancel_requested_at</code> 반영(Queue Spec §12와 일치)</td></tr>
+    <tr><td>반영 이유</td><td>후속 문서(Migration·Profile)와 컬럼·CHECK 불일치 제거, 텍스트 검색 확장 대비</td></tr>
+    <tr><td>우선순위</td><td class="p0">P0 (①②④) · <span class="p3">P3</span> (③ media_texts)</td></tr>
+    <tr><td>영향 문서</td><td>Migration &amp; Seed §5.3·§7 · Transcode Profile §9~10 · Worker Agent §12</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — ①②④ 적용 + §3 요약표에 progresses·audit_logs·allowed_transitions 추가(2차). ③ media_texts는 P3 검토 문구로 기재</td></tr>
+  </table>
+
+  <h2>3. Queue &amp; Worker Architecture v1.0</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>§5 Claim · §10 진행률 · §12 우선순위</td></tr>
+    <tr><td>수정 내용</td><td>① priority 컬럼·정렬 <code>ORDER BY priority DESC, created_at ASC</code>를 "제안"이 아닌 <b>확정 사양</b>으로 표기 변경 ② workflow_job_progresses를 공식 테이블로 확정(job_id PK · progress_percent numeric(5,2) · progress_message varchar(500) · estimated_remaining_sec int · updated_at) ③ "진행률은 workflow_jobs에 저장하지 않는다 · RUNNING 화면은 progresses 조회 · 종결 시 Worker/CLEANUP이 행 삭제" 3원칙 명시</td></tr>
+    <tr><td>반영 이유</td><td>제안 → 확정 사양 승격, DB 문서와 단일 기준화</td></tr>
+    <tr><td>우선순위</td><td class="p0">P0</td></tr>
+    <tr><td>영향 문서</td><td>DB Table Spec(항목 2-④) · Migration &amp; Seed §5.9 · Admin UI §7 · Worker Agent §11</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — priority·progresses 확정 사양 표기</td></tr>
+  </table>
+
+  <h2>4. State Machine Implementation v1.0 + Controller &amp; Service v1.0</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>State Machine §16 transition() 코드 · Controller &amp; Service §7 AbstractStateMachine·§17 JobRetryService</td></tr>
+    <tr><td>수정 내용</td><td>① <b>트랜잭션 소유권 정리</b>: StateMachine.transition() 내부의 <code>DB::transaction()</code> 제거 — 현재 트랜잭션 안에서 CAS UPDATE + history INSERT만 수행. CommandService가 최상위 트랜잭션을 소유. 단독 전이(Scheduler 등)는 별도 wrapper(<code>TransitionRunner</code>)가 트랜잭션 오픈 ② "직접 <code>update(['status'=>…])</code> 금지 · 반드시 StateMachine 경유" 문구 유지·강조 ③ CAS 패턴 유지: <code>WHERE id=? AND status=?</code>, Worker 완료 기록은 <code>AND worker_id=?</code> 추가</td></tr>
+    <tr><td>반영 이유</td><td>중첩 트랜잭션(암묵적 savepoint)으로 인한 부분 커밋·롤백 모호성 제거</td></tr>
+    <tr><td>우선순위</td><td class="p0">P0</td></tr>
+    <tr><td>영향 문서</td><td>Worker Agent §6 (Claim 트랜잭션 구조는 유지 — Claim이 최상위 소유자임을 주석으로 명시)</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — 양쪽 transition() 코드에서 내부 트랜잭션 제거 + assert 추가, Claim 주석 추가(2차)</td></tr>
+  </table>
+
+  <h2>5. Admin API v1.0 + Controller &amp; Service v1.0 + OpenAPI v1.0 (감사 미들웨어)</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>Controller &amp; Service §3 라우트·§11 AuditLogger · Admin API §2·§22</td></tr>
+    <tr><td>수정 내용</td><td>① 미들웨어 분리: <code>audit.context</code>(전 관리자 요청 — actor/ip/UA 수집만) + <code>audit.write</code>(POST/PATCH/DELETE만 — 저장 경로 활성). 라우트 그룹의 <code>'audit'</code>를 <code>'audit.context'</code>로 바꾸고 조작 라우트에 <code>audit.write</code> 추가 ② admin_audit_logs 저장은 GET 대상 아님을 명시 — 저장은 CommandService/AuditLogger에서만 ③ reason 필수는 FormRequest + AuditLogger 이중 검증 명시(현행 유지 확인) ④ available_actions는 AvailableActionService 단일 계산·프론트는 배열만 사용 원칙 재확인</td></tr>
+    <tr><td>반영 이유</td><td>GET 로그 폭증 방지, 감사 저장 책임 단일화</td></tr>
+    <tr><td>우선순위</td><td class="p1">P1</td></tr>
+    <tr><td>영향 문서</td><td>OpenAPI §14 (x-permission 설명에 audit.write 병기)</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — audit.context/audit.write 분리, GET 저장 제외 명시</td></tr>
+  </table>
+
+  <h2>6. Migration &amp; Seed v1.0 + Transcode Profile v1.0 (variant_key · COMMON)</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>Migration §5.3·§7 · Transcode Profile §3·§14</td></tr>
+    <tr><td>수정 내용</td><td>① Migration §5.3 media_renditions 코드에 variant_key 컬럼 추가 ② §7 unique 3종을 variant_key 포함으로 교체: 단건 <code>(content_id, rendition_type, variant_key) WHERE page_no IS NULL AND timecode_ms IS NULL</code> / 페이지 <code>(…, variant_key, page_no) WHERE page_no IS NOT NULL</code> / 타임코드 <code>(…, variant_key, timecode_ms) WHERE timecode_ms IS NOT NULL</code> — Transcode Profile §10과 동일 기준으로 통일(현재 Migration 문서만 구버전) ③ transcode_profiles.media_type CHECK에 <code>COMMON</code> 추가 — THUMBNAIL_DEFAULT·CATALOG_DEFAULT seed의 media_type을 VIDEO → COMMON으로 수정 ④ seed 전 항목에 variant_key 포함 확인(현행 포함됨 — 검증만)</td></tr>
+    <tr><td>반영 이유</td><td>다중 화질 도입 시 스키마 변경 없이 확장, 공통 프리셋의 유형 중복 정의 제거</td></tr>
+    <tr><td>우선순위</td><td class="p0">P0 (①②) · <span class="p1">P1</span> (③④)</td></tr>
+    <tr><td>영향 문서</td><td>DB Table Spec(항목 2-②) · Worker Agent §12(rendition upsert 키 설명)</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — variant_key 컬럼·unique 3종 재구성, COMMON 추가(THUMBNAIL/CATALOG seed → COMMON)</td></tr>
+  </table>
+
+  <h2>7. Worker Agent v1.0 (동시성 모델 명확화)</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>Worker Agent §2·§18 · Queue Spec §4 표 · Migration §5.8 주석</td></tr>
+    <tr><td>수정 내용</td><td>① "초기 구현 = Worker 프로세스 1개당 Job 1개" 원칙 명시 — 동시성은 supervisor <code>numprocs</code>로 해결(§18 주석 승격) ② <code>current_job_id</code>는 이 전제에서만 유효함을 명시 ③ <code>max_concurrency</code>는 노드 용량 표시/향후 확장용으로 강등 — Claim 로직이 참조하지 않음 ④ 추후 1 Worker N Job 필요 시 <code>workflow_worker_agent_slots</code> 테이블 검토 문구 추가</td></tr>
+    <tr><td>반영 이유</td><td>current_job_id(단수)와 max_concurrency(복수) 모순 제거</td></tr>
+    <tr><td>우선순위</td><td class="p1">P1</td></tr>
+    <tr><td>영향 문서</td><td>Admin UI §9(동시 컬럼 표기: 사용/전체 → 프로세스 기준) · Admin API §17 응답 필드 의미</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — 1프로세스=1Job·numprocs·slots 검토 문구 명시</td></tr>
+  </table>
+
+  <h2>8. Transcode Profile v1.0 (운영 정책 확인)</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>§15 Worker 적용 · §17 운영</td></tr>
+    <tr><td>수정 내용</td><td>확인·유지 항목(수정 아닌 검증): rendition 생성 시 profile_id + variant_key 동시 저장 · 다중 화질 활성 전 unique key variant_key 기반 여부 선행 확인 · HLS = playlist 1행 + metadata segment 목록 · 프로파일 변경은 신규 콘텐츠부터, 소급은 관리자 일괄 재처리 — 각 항목에 "확정" 표기 추가</td></tr>
+    <tr><td>반영 이유</td><td>제안 문구 → 확정 사양 승격</td></tr>
+    <tr><td>우선순위</td><td class="p2">P2</td></tr>
+    <tr><td>영향 문서</td><td>Worker Agent §12 · Migration §7</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — variant_key 동시 저장·확정 표기</td></tr>
+  </table>
+
+  <h2>9. OpenAPI v1.0 ($ref 정규화 · 계약 일치)</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>§4 공통 Schema·§12 Response Schema 전체</td></tr>
+    <tr><td>수정 내용</td><td>① 축약 표기 <code>$ref: '#/…/ContentStatus'</code> 전부 → <code>#/components/schemas/ContentStatus</code> 등 완전 경로로 교체 (schemas/responses/parameters/securitySchemes 4종 prefix만 허용) ② §12의 산문형 필드 나열(WorkflowJobListItem 등)을 실제 YAML property 정의로 전개 ③ CI 계약 테스트 4종 명시 강화: x-permission ↔ route middleware · requestBody ↔ FormRequest rules · response schema ↔ Resource · error response ↔ Exception Handler ④ Laravel 라우트에서 <code>jobs/retry-batch</code>가 <code>jobs/{job}</code>보다 먼저 선언됨 재확인 문구(Controller &amp; Service §3 현행 정상 — 상호 참조 추가)</td></tr>
+    <tr><td>반영 이유</td><td>축약 표기는 Swagger 도구에서 파싱 불가 — 기계 판독 목적 자체가 깨짐</td></tr>
+    <tr><td>우선순위</td><td class="p0">P0 (①②) · <span class="p1">P1</span> (③④)</td></tr>
+    <tr><td>영향 문서</td><td>Admin API · Controller &amp; Service (계약 대조 기준)</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — $ref 완전 경로화(잔존 0건 확인) + $ref 규칙 주석·계약 테스트 4종</td></tr>
+  </table>
+
+  <h2>10. Incident Response Runbook v1.0 (교차 일치 검증)</h2>
+  <table>
+    <tr><th style="width: 88px;">항목</th><th>내용</th></tr>
+    <tr><td>수정 위치</td><td>§14 Lock 회수 · §16 Worker 비활성화 · §17 조작표 · §18 SQL</td></tr>
+    <tr><td>수정 내용</td><td>수정 아닌 교차 검증 항목: ① §17 조작 기준 = Admin UI §11 버튼 노출 조건과 대조 ② §14 = Admin API §15 release-lock 정책과 대조 ③ §16 = Worker disable API(drain) 정책과 대조 ④ §18 SQL 테이블·컬럼명 = Migration 문서 최종본과 대조(variant_key 반영 후 SQL-8에 variant_key 조건 불필요 확인) ⑤ Master 보호 원칙(§2)·강제 PUBLISH 금지(§12) 문구 유지 확인 — 각 절에 "출처 문서 §" 상호 참조 각주 추가</td></tr>
+    <tr><td>반영 이유</td><td>Runbook이 원본 정책과 어긋나면 장애 시 잘못된 조치 유도</td></tr>
+    <tr><td>우선순위</td><td class="p2">P2</td></tr>
+    <tr><td>영향 문서</td><td>Admin UI · Admin API · Migration &amp; Seed</td></tr>
+    <tr><td>반영 상태</td><td style="color:#2c6e49;font-weight:700;">✓ 반영 완료 — 기준 출처 각주 추가(원본 정책 문서 우선 원칙)</td></tr>
+  </table>
+
+  <h2>적용 순서 요약 — 최종 현황</h2>
+  <table>
+    <tr><th style="width: 60px;">순위</th><th>항목</th><th style="width: 130px;">상태</th></tr>
+    <tr><td class="p0">P0</td><td>1(DOC 분기·계층) · 2(storage_zone·variant_key·priority) · 3(progresses 확정) · 4(트랜잭션 소유권) · 6①②(unique 재구성) · 9①②($ref 정규화)</td><td style="color:#2c6e49;font-weight:700;">✓ 전부 반영</td></tr>
+    <tr><td class="p1">P1</td><td>5(audit 분리) · 6③④(COMMON) · 7(동시성 모델) · 9③④(계약 테스트) + 2차 발견 2건(DB Spec §3 요약표·Claim 주석)</td><td style="color:#2c6e49;font-weight:700;">✓ 전부 반영</td></tr>
+    <tr><td class="p2">P2</td><td>8(프로파일 확정 표기) · 10(Runbook 교차 검증 각주)</td><td style="color:#2c6e49;font-weight:700;">✓ 전부 반영</td></tr>
+    <tr><td class="p3">P3</td><td>2③(media_texts 분리 검토) — DB Table Spec §8에 검토 항목으로 기재됨</td><td class="p3">미결 (장기)</td></tr>
+  </table>
+  <p class="muted">2차 정합성 검토(2026-07-04)에서 신규 충돌 0건 확인 — 문서 세트 13종은 구현 착수 가능 상태다.</p>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Revision Checklist</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; }
+  doc-page .muted { color: #6b7080; }
+  doc-page .in { color: #2c6e49; font-weight: 700; }
+  doc-page .out { color: #b23a3a; font-weight: 700; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Workflow MVP Scope &amp; Git Strategy</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>Frame CMS/MAM Workflow MVP Scope &amp; Git Strategy</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">워크플로우 MVP 범위 및 Git 전략서 — 개발 착수 기준 문서</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 연관: Implementation Roadmap · WBS &amp; Milestone Plan</p>
+
+  <h2>1. MVP 범위</h2>
+  <table>
+    <tr><th style="width: 70px;">구분</th><th>항목</th></tr>
+    <tr><td class="in">포함</td><td>UPLOAD/REGISTER 연동 · TM · VERIFY · MA · TC(720p 단일) · CA · INDEX · PUBLISH · CLEANUP · Scheduler·Worker 기반 전체 · Audit Log — Admin API/UI 범위는 아래 구분표 참조</td></tr>
+    <tr><td class="out">제외</td><td>OCR · STT · AI_ANALYSIS · HLS · 다중 화질(480p/360p) · WAVEFORM · 문서 OCR 고도화 · media_texts 분리 · IMAGE/AUDIO/DOC 파이프라인(M6)</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 170px;">Admin 범위 구분</th><th>항목</th></tr>
+    <tr><td class="in">MVP Admin API 포함</td><td>Dashboard / Contents / Jobs / Workers 조회 API · Job retry API · Job cancel API · release-lock API · Worker disable / enable / clear-error API · Audit Log 기록</td></tr>
+    <tr><td class="in">MVP Admin UI 포함</td><td>Dashboard · 콘텐츠 처리 목록 · 콘텐츠 처리 상세 · 실패 Job 확인 · 실패 Job 재시도 · Worker 상태 조회</td></tr>
+    <tr><td class="out">MVP Admin UI 보류</td><td>Lock 강제 회수 버튼 · Worker disable / enable / clear-error 조작 버튼 — <b>조작 API는 MVP에서 구현하되, UI 버튼 노출은 기본 운영 화면에서 보류</b>하고 M6 또는 HIGH 권한 전용 고급 메뉴에서 검토 (운영/복구는 API로 수행 가능)</td></tr>
+  </table>
+  <p class="muted">버튼 노출 원칙: 프론트엔드는 자체 판정 없이 서버가 계산한 <code>available_actions</code> 배열만 기준으로 버튼을 노출한다. MVP 기본 운영 화면에서는 HIGH 위험 조작 버튼이 노출되지 않도록 available_actions 또는 UI 정책으로 통제한다. 단, release-lock / Worker disable / enable / clear-error <b>API 자체는 MVP에서 구현</b>하며, HIGH 권한 전용 화면 또는 직접 API 호출 권한을 가진 운영자에게만 허용한다.</p>
+  <p class="muted">제외 항목은 스키마·전이표에 이미 반영되어 있어(variant_key·선택 작업 정의) 활성화만으로 확장된다 — MVP에서 코드 경로만 미구현.</p>
+  <p><b>INDEX 리스크 관리</b>: INDEX는 MVP 필수 job이며 INDEX 성공 후 PUBLISH가 진행되는 설계를 따른다. 검색엔진 연동·폐쇄망 검증 지연 시 일정 리스크 — M3 게이트 전 연결·mapping·upsert·조회 검증 선행 확인. Mock INDEX로 READY를 허용하는 방식은 기본 정책이 아니며, 개발 환경 테스트용으로만 허용한다(운영 MVP 게이트 = 실제 INDEX 성공).</p>
+
+  <h3>1.1 MVP 완료 기준 (DoD)</h3>
+  <ul>
+    <li>영상 파일 업로드 → 사람 개입 없이 contents.status = READY 전환 (성공 시나리오).</li>
+    <li>웹 상세 화면에서 Proxy 720p 재생 + 썸네일·카탈로그 표출, <b>Master 직접 접근 경로 0건</b>.</li>
+    <li>운영자가 Admin UI에서 실패 확인 → 사유 열람 → 재시도 → READY 회복 완주.</li>
+    <li>Worker 강제 종료 시 lease 자동 회수 → 다른 Worker가 재실행 (무인 복구).</li>
+    <li>모든 조작이 admin_audit_logs에 사유와 함께 기록.</li>
+    <li>조작 API(retry·cancel·release-lock·Worker 관리) 전부 구현 + 계약 테스트 통과 — 단, HIGH 위험 UI 버튼(Lock 회수·Worker 조작)은 기본 운영 화면에 미노출.</li>
+    <li>OpenAPI 계약 테스트·상태 전이 전수 테스트 CI 통과.</li>
+  </ul>
+
+  <h3>1.2 MVP 테스트 시나리오</h3>
+  <table>
+    <tr><th style="width: 42px;">#</th><th style="width: 210px;">시나리오</th><th>기대 결과</th></tr>
+    <tr><td>T1</td><td>정상 영상(MP4/MOV) 업로드</td><td>8개 job 순차 SUCCESS → READY, rendition 4종+ 생성</td></tr>
+    <tr><td>T2</td><td>손상 파일 업로드</td><td>VERIFY FAILED(PERMANENT) → 후속 SKIPPED → contents FAILED + 알림</td></tr>
+    <tr><td>T3</td><td>TC 실행 중 Worker kill</td><td>lease 만료 회수 → RETRY → 재실행 SUCCESS, 늦은 결과 폐기</td></tr>
+    <tr><td>T4</td><td>실패 job 수동 재시도</td><td>FAILED→RETRY→SUCCESS, retry_count 초기화, 감사 로그</td></tr>
+    <tr><td>T5</td><td>동시 업로드 10건</td><td>이중 claim 0건, 전건 READY</td></tr>
+    <tr><td>T6</td><td>검색엔진 중단 상태 업로드</td><td>INDEX RETRY 백오프 → 엔진 복구 후 자동 SUCCESS</td></tr>
+    <tr><td>T7</td><td>처리 중 콘텐츠 취소</td><td>비종결 job CANCELED·RUNNING cancel_requested → 정리 완료</td></tr>
+  </table>
+
+  <h3>1.3 MVP 이후 확장 (M6 순서 제안)</h3>
+  <p>IMAGE 파이프라인 → AUDIO → DOC(PREVIEW·TEXT_EXTRACT) → OCR·WAVEFORM → 다중 화질·HLS → STT·AI_ANALYSIS → media_texts 검토. 운영 수요에 따라 재조정.</p>
+
+  <h2>2. Git 전략</h2>
+
+  <h3>2.1 브랜치 전략</h3>
+  <table>
+    <tr><th style="width: 230px;">브랜치</th><th>용도 / 규칙</th></tr>
+    <tr><td><code>main</code></td><td>운영 배포본 — 태그(v0.x) 기반 배포, 직접 push 금지</td></tr>
+    <tr><td><code>develop</code></td><td>통합 브랜치 — 모든 feature PR의 대상, CI 전체 통과 유지</td></tr>
+    <tr><td><code>feature/workflow-engine</code></td><td>WBS 2·3 (DB·StateMachine·인스턴스 생성) + 4.3 Scheduler</td></tr>
+    <tr><td><code>feature/workflow-worker</code></td><td>WBS 4·5·6 (Claim·Worker·Storage·Handler)</td></tr>
+    <tr><td><code>feature/workflow-admin-api</code></td><td>WBS 7</td></tr>
+    <tr><td><code>feature/workflow-admin-ui</code></td><td>WBS 8</td></tr>
+    <tr><td><code>hotfix/workflow-*</code></td><td>운영 긴급 수정 — main에서 분기, main+develop 동시 머지</td></tr>
+  </table>
+  <p class="muted">feature 브랜치는 장수 금지 — 커밋 단위(§2.2)별로 develop에 자주 머지한다. 하위 작업은 <code>feature/workflow-worker/tc-handler</code>처럼 슬래시 하위 브랜치로.</p>
+
+  <h3>2.2 커밋 단위 (권장 14단계)</h3>
+  <pre> 1. feat(workflow): add workflow enums, migrations and seeds        ← WBS 2
+ 2. feat(workflow): add models, casts, relations and factories       ← WBS 2.5
+ 3. feat(workflow): implement state machines with transition tests   ← WBS 3.1~3.4
+ 4. feat(workflow): add instance/job creation from templates         ← WBS 3.3
+ 5. feat(workflow): implement scheduler and lock recovery            ← WBS 4.3
+ 6. feat(worker): implement base loop, claim and heartbeat           ← WBS 4.1~4.5
+ 7. feat(worker): add storage, rendition and profile services        ← WBS 5
+ 8. feat(worker): add MVP handlers TM/VERIFY/MA/PUBLISH/CLEANUP      ← WBS 6.1~6.3
+ 9. feat(worker): add media handlers TC/CA and INDEX                 ← WBS 6.4~6.6
+10. feat(worker): add document handlers DOC_PREVIEW/TEXT_EXTRACT/OCR ← M6
+11. feat(admin): add workflow query APIs                             ← WBS 7.1~7.2
+12. feat(admin): add command APIs with audit logs                    ← WBS 7.3~7.4
+13. feat(admin): add dashboard/list/detail UI                        ← WBS 8
+14. test(workflow): add e2e, runbook validation and openapi contract ← WBS 6.8·7.5·9</pre>
+
+  <h3>2.3 PR 기준</h3>
+  <ul>
+    <li>1 PR = 1 커밋 단위(위 표) 또는 그 하위 태스크 — 리뷰 가능한 크기(±500라인 목표).</li>
+    <li>필수 체크: CI 전체 통과 · 관련 설계 문서 § 링크 · 스키마 변경 시 DBA 리뷰 · 상태 전이 관련 변경 시 전이 전수 테스트 첨부.</li>
+    <li>리뷰 승인 1인 이상(HIGH 위험 영역 — StateMachine·Claim·Storage 가드 — 는 2인).</li>
+    <li>머지 방식: squash merge (develop) — 커밋 메시지가 §2.4 컨벤션이 되도록.</li>
+  </ul>
+
+  <h3>2.4 테스트 통과 기준 (CI 게이트)</h3>
+  <table>
+    <tr><th style="width: 190px;">게이트</th><th>기준</th></tr>
+    <tr><td>단위·기능 테스트</td><td>전건 통과 — 실패 시 머지 차단</td></tr>
+    <tr><td>상태 전이 전수 테스트</td><td>enum ↔ seed ↔ trigger 일치 포함</td></tr>
+    <tr><td>arch 테스트</td><td>직접 status update 금지·StateMachine 우회 금지</td></tr>
+    <tr><td>OpenAPI 계약 테스트</td><td>spectral lint + 라우트/권한/스키마 일치 (admin-api PR)</td></tr>
+    <tr><td>동시성 테스트</td><td>claim·lease 시나리오 (worker PR)</td></tr>
+  </table>
+
+  <h3>2.5 커밋 메시지 컨벤션</h3>
+  <pre>&lt;type&gt;(&lt;scope&gt;): &lt;subject&gt;          # 소문자, 명령형, 마침표 없음
+
+type : feat | fix | test | docs | refactor | chore | perf
+scope: workflow | worker | admin | db | ops
+
+예:
+feat(workflow): implement job state machine
+feat(worker): implement video transcode handler
+fix(worker): discard stale results after lease loss
+test(workflow): add state transition tests
+docs(workflow): update runbook references</pre>
+
+  <h3>2.6 롤백 기준</h3>
+  <ul>
+    <li>운영 장애 유발 커밋: <code>revert</code> 커밋으로 되돌림 (force push 금지).</li>
+    <li><b>DB migration은 롤백하지 않는다</b> — fix-forward 원칙(Migration Spec §14). 스키마 문제는 새 migration으로 수정.</li>
+    <li>Worker 배포 롤백: DISABLED(drain) → 이전 태그 재배포 → enable.</li>
+    <li>롤백 시 hotfix 브랜치에서 원인 수정 후 main·develop 동시 반영.</li>
+  </ul>
+
+  <h3>2.7 기능별 작업 순서 (착수 체크리스트)</h3>
+  <ol>
+    <li>repo 초기화: main·develop 보호 규칙 + CI 파이프라인 (게이트 5종).</li>
+    <li><code>feature/workflow-engine</code>에서 커밋 1~5 순차 진행 — M1 게이트.</li>
+    <li><code>feature/workflow-worker</code>에서 커밋 6~7 (엔진 4 이후 병행 가능) — M2 게이트.</li>
+    <li>커밋 8~9로 VIDEO 파이프라인 — M3 게이트 (E2E 통과 시 태그 v0.3).</li>
+    <li><code>admin-api</code> 커밋 11~12 (커밋 4 이후 병행 가능), <code>admin-ui</code> 커밋 13 — M4 게이트.</li>
+    <li>커밋 14 + 부하·장애 리허설 — M5 게이트, 태그 v1.0-mvp.</li>
+    <li>M6 확장은 커밋 10부터 동일 패턴.</li>
+  </ol>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Project Execution Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

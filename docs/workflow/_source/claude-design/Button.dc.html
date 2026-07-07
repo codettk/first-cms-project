@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-app: oklch(0.982 0.002 265); --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265); --bg-hover: oklch(0.952 0.004 265);
+    --border: oklch(0.918 0.004 265); --border-strong: oklch(0.85 0.006 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-hover: oklch(0.46 0.095 264); --accent-fg: oklch(0.99 0 0); --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+    --ok: oklch(0.62 0.09 155); --ok-bg: oklch(0.95 0.03 155); --ok-fg: oklch(0.44 0.08 155);
+    --warn: oklch(0.72 0.1 75); --warn-bg: oklch(0.96 0.04 82); --warn-fg: oklch(0.5 0.09 62);
+    --danger: oklch(0.57 0.16 25); --danger-bg: oklch(0.96 0.03 25); --danger-fg: oklch(0.51 0.16 25);
+    --shadow-sm: 0 1px 2px oklch(0.2 0.02 265 / 0.06);
+  }
+  html[data-theme="dark"] {
+    --bg-app: oklch(0.162 0.004 265); --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265); --bg-hover: oklch(0.278 0.008 265);
+    --border: oklch(0.29 0.007 265); --border-strong: oklch(0.38 0.01 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-hover: oklch(0.74 0.11 264); --accent-fg: oklch(0.16 0.02 264); --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+    --ok: oklch(0.7 0.12 155); --ok-bg: oklch(0.31 0.05 155); --ok-fg: oklch(0.84 0.1 155);
+    --warn: oklch(0.8 0.12 82); --warn-bg: oklch(0.33 0.05 78); --warn-fg: oklch(0.88 0.1 85);
+    --danger: oklch(0.66 0.17 25); --danger-bg: oklch(0.33 0.07 25); --danger-fg: oklch(0.84 0.13 25);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+  }
+</style>
+</helmet>
+<button onClick="{{ onClick }}" disabled="{{ isDisabled }}" style="{{ rootStyle }}" style-hover="{{ hoverStyle }}">
+  <sc-if value="{{ showLead }}"><ds-icon glyph="{{ glyph }}" size="{{ iconSize }}" sw="{{ iconSw }}"></ds-icon></sc-if>
+  <sc-if value="{{ showLabel }}"><span style="white-space: nowrap;">{{ label }}</span></sc-if>
+  <sc-if value="{{ showTrail }}"><ds-icon glyph="{{ trailingGlyph }}" size="{{ iconSize }}" sw="{{ iconSw }}"></ds-icon></sc-if>
+</button>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 200, &quot;height&quot;: 72}, &quot;variant&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;primary&quot;, &quot;secondary&quot;, &quot;ghost&quot;, &quot;danger&quot;, &quot;dangerSolid&quot;], &quot;default&quot;: &quot;primary&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;size&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;sm&quot;, &quot;md&quot;, &quot;lg&quot;], &quot;default&quot;: &quot;md&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;label&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;버튼&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;glyph&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;trailingGlyph&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;iconOnly&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;disabled&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;full&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const variant = p.variant ?? 'primary';
+    const size = p.size ?? 'md';
+    const label = p.label ?? '버튼';
+    const glyph = p.glyph ?? '';
+    const trailingGlyph = p.trailingGlyph ?? '';
+    const iconOnly = p.iconOnly === true || p.iconOnly === 'true';
+    const disabled = p.disabled === true || p.disabled === 'true';
+    const full = p.full === true || p.full === 'true';
+
+    const sizes = {
+      sm: { h: 32, px: 13, fs: 12.5, r: 8, icon: 15, gap: 6 },
+      md: { h: 38, px: 16, fs: 13.5, r: 9, icon: 17, gap: 7 },
+      lg: { h: 44, px: 20, fs: 15, r: 10, icon: 19, gap: 8 },
+    };
+    const S = sizes[size] || sizes.md;
+
+    const variants = {
+      primary: { bg: 'var(--accent)', fg: 'var(--accent-fg)', bd: 'transparent', sh: 'var(--shadow-sm)', hbg: 'var(--accent-hover)', hfg: 'var(--accent-fg)', hbd: 'transparent' },
+      secondary: { bg: 'var(--bg-surface)', fg: 'var(--text-1)', bd: 'var(--border)', sh: 'none', hbg: 'var(--bg-hover)', hfg: 'var(--text-1)', hbd: 'var(--border)' },
+      ghost: { bg: 'transparent', fg: 'var(--text-2)', bd: 'transparent', sh: 'none', hbg: 'var(--bg-subtle)', hfg: 'var(--text-1)', hbd: 'transparent' },
+      danger: { bg: 'transparent', fg: 'var(--danger-fg)', bd: 'var(--border)', sh: 'none', hbg: 'var(--danger-bg)', hfg: 'var(--danger-fg)', hbd: 'var(--border)' },
+      dangerSolid: { bg: 'var(--danger)', fg: '#fff', bd: 'transparent', sh: 'var(--shadow-sm)', hbg: 'var(--danger)', hfg: '#fff', hbd: 'transparent' },
+    };
+    const V = variants[variant] || variants.primary;
+
+    const pad = iconOnly ? '0' : `0 ${S.px}px`;
+    const width = iconOnly ? `${S.h}px` : (full ? '100%' : 'auto');
+    const base = `display: ${full ? 'flex' : 'inline-flex'}; align-items: center; justify-content: center; gap: ${S.gap}px; height: ${S.h}px; width: ${width}; padding: ${pad}; border-radius: ${S.r}px; font-size: ${S.fs}px; font-weight: ${variant === 'primary' || variant === 'dangerSolid' ? 600 : 500}; font-family: inherit; letter-spacing: -0.006em; cursor: ${disabled ? 'not-allowed' : 'pointer'}; transition: background .15s, color .15s, border-color .15s; box-sizing: border-box;`;
+
+    let rootStyle, hoverStyle;
+    if (disabled) {
+      rootStyle = base + ` border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text-3); box-shadow: none; opacity: 0.7;`;
+      hoverStyle = '';
+    } else {
+      rootStyle = base + ` border: 1px solid ${V.bd}; background: ${V.bg}; color: ${V.fg}; box-shadow: ${V.sh};`;
+      hoverStyle = `background: ${V.hbg}; color: ${V.hfg}; border-color: ${V.hbd};`;
+    }
+
+    return {
+      rootStyle, hoverStyle,
+      isDisabled: disabled,
+      label, glyph, trailingGlyph,
+      iconSize: S.icon, iconSw: 1.7,
+      showLead: !!glyph,
+      showTrail: !!trailingGlyph && !iconOnly,
+      showLabel: !iconOnly,
+      onClick: p.onClick || (() => {}),
+    };
+  }
+}
+</script>
+</body>
+</html>

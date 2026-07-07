@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-app: oklch(0.982 0.002 265); --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265); --bg-hover: oklch(0.952 0.004 265);
+    --border: oklch(0.918 0.004 265); --border-strong: oklch(0.85 0.006 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-hover: oklch(0.46 0.095 264); --accent-fg: oklch(0.99 0 0); --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+    --ok: oklch(0.62 0.09 155); --ok-bg: oklch(0.95 0.03 155); --ok-fg: oklch(0.44 0.08 155);
+    --warn: oklch(0.72 0.1 75); --warn-bg: oklch(0.96 0.04 82); --warn-fg: oklch(0.5 0.09 62);
+    --danger: oklch(0.57 0.16 25); --danger-bg: oklch(0.96 0.03 25); --danger-fg: oklch(0.51 0.16 25);
+    --shadow-sm: 0 1px 2px oklch(0.2 0.02 265 / 0.06);
+    --shadow-md: 0 4px 16px oklch(0.2 0.02 265 / 0.09), 0 1px 3px oklch(0.2 0.02 265 / 0.06);
+  }
+  html[data-theme="dark"] {
+    --bg-app: oklch(0.162 0.004 265); --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265); --bg-hover: oklch(0.278 0.008 265);
+    --border: oklch(0.29 0.007 265); --border-strong: oklch(0.38 0.01 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-hover: oklch(0.74 0.11 264); --accent-fg: oklch(0.16 0.02 264); --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+    --ok: oklch(0.7 0.12 155); --ok-bg: oklch(0.31 0.05 155); --ok-fg: oklch(0.84 0.1 155);
+    --warn: oklch(0.8 0.12 82); --warn-bg: oklch(0.33 0.05 78); --warn-fg: oklch(0.88 0.1 85);
+    --danger: oklch(0.66 0.17 25); --danger-bg: oklch(0.33 0.07 25); --danger-fg: oklch(0.84 0.13 25);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+    --shadow-md: 0 4px 16px oklch(0 0 0 / 0.4), 0 1px 3px oklch(0 0 0 / 0.3);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  [data-ds] ::placeholder { color: var(--text-3); }
+  [data-ds] *::-webkit-scrollbar { width: 10px; height: 10px; }
+  [data-ds] *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+  [data-anchor] { scroll-margin-top: 84px; }
+  [data-navlink]:hover { background: var(--bg-subtle); color: var(--text-1); }
+</style>
+</helmet>
+<div data-ds data-theme="{{ theme }}" style="min-height: 100vh; background: var(--bg-app); color: var(--text-1); font-family: 'IBM Plex Sans KR', system-ui, sans-serif; font-size: 14px; letter-spacing: -0.006em; -webkit-font-smoothing: antialiased;">
+
+  <header style="position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 14px; padding: 0 28px; height: 64px; background: color-mix(in oklab, var(--bg-app) 84%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);">
+    <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: var(--accent-fg); box-shadow: var(--shadow-sm);"><ds-icon glyph="layers" size="18"></ds-icon></div>
+    <div>
+      <div style="font-size: 15px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15;">Frame 디자인 시스템</div>
+      <div style="font-size: 12px; color: var(--text-3);">Design System · 미디어 CMS</div>
+    </div>
+    <div style="flex: 1;"></div>
+    <span style="font-size: 12px; color: var(--text-3); font-family: 'IBM Plex Mono', monospace;">v1.0 · 20 components</span>
+    <button onClick="{{ onToggleTheme }}" style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-1); font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;" style-hover="background: var(--bg-hover);">
+      <ds-icon glyph="{{ themeGlyph }}" size="16"></ds-icon>{{ themeLabel }}
+    </button>
+  </header>
+
+  <div style="max-width: 1180px; margin: 0 auto; padding: 0 28px; display: grid; grid-template-columns: 184px 1fr; gap: 40px; align-items: start;">
+
+    <nav style="position: sticky; top: 84px; padding: 28px 0; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 84px); overflow-y: auto;">
+      <sc-for list="{{ navLinks }}" as="l" hint-placeholder-count="10">
+        <a data-navlink href="{{ l.href }}" style="display: block; padding: 7px 11px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text-2); text-decoration: none; transition: background .12s, color .12s;">{{ l.label }}</a>
+      </sc-for>
+    </nav>
+
+    <main style="padding: 28px 0 100px; min-width: 0;">
+
+      <div style="margin-bottom: 40px;">
+        <div style="font-size: 28px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 8px;">컴포넌트 라이브러리</div>
+        <div style="font-size: 15px; color: var(--text-2); line-height: 1.6; max-width: 620px;">미디어 콘텐츠 관리 시스템을 위한 재사용 가능한 컴포넌트 모음입니다. 각 예시는 독립 <span style="font-family: 'IBM Plex Mono', monospace; color: var(--text-1); font-size: 13px;">.dc.html</span> 컴포넌트의 실제 인스턴스이며, 라이트·다크 테마를 공유합니다.</div>
+      </div>
+
+      <section data-anchor id="foundation" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Foundation</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 18px;">파운데이션</div>
+
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; margin-bottom: 16px;">
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 16px;">색상 <span style="color: var(--text-3); font-weight: 400;">Color tokens</span></div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 12px;">
+            <sc-for list="{{ swatches }}" as="s" hint-placeholder-count="12">
+              <div>
+                <div style="height: 52px; border-radius: 10px; background: {{ s.value }}; border: 1px solid var(--border); margin-bottom: 7px;"></div>
+                <div style="font-size: 12px; font-weight: 500; color: var(--text-1);">{{ s.label }}</div>
+                <div style="font-size: 11px; color: var(--text-3); font-family: 'IBM Plex Mono', monospace;">{{ s.token }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px;">
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 18px;">타이포그래피 <span style="color: var(--text-3); font-weight: 400;">Type scale · IBM Plex Sans KR</span></div>
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="5">
+              <div style="display: flex; align-items: baseline; gap: 20px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">
+                <span style="width: 116px; flex-shrink: 0; font-size: 11.5px; color: var(--text-3); font-family: 'IBM Plex Mono', monospace;">{{ t.meta }}</span>
+                <span style="{{ t.style }}">{{ t.sample }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+
+      <section data-anchor id="buttons" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Button</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">버튼</div>
+        <div style="font-size: 13.5px; color: var(--text-2); margin-bottom: 18px;">5개 variant · 3개 size · 아이콘 · 비활성 상태</div>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+          <div>
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 12px;">Variant</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+              <dc-import name="Button" variant="primary" label="기본" hint-size="72px,38px"></dc-import>
+              <dc-import name="Button" variant="secondary" label="보조" hint-size="72px,38px"></dc-import>
+              <dc-import name="Button" variant="ghost" label="고스트" hint-size="80px,38px"></dc-import>
+              <dc-import name="Button" variant="danger" label="위험" hint-size="72px,38px"></dc-import>
+              <dc-import name="Button" variant="dangerSolid" label="삭제" hint-size="72px,38px"></dc-import>
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 12px;">Size · Icon · State</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+              <dc-import name="Button" variant="primary" size="sm" label="Small" hint-size="70px,32px"></dc-import>
+              <dc-import name="Button" variant="primary" size="md" glyph="upload" label="업로드" hint-size="110px,38px"></dc-import>
+              <dc-import name="Button" variant="secondary" size="lg" label="Large" trailing-glyph="chevronDown" hint-size="120px,44px"></dc-import>
+              <dc-import name="Button" variant="secondary" icon-only="true" glyph="star" hint-size="38px,38px"></dc-import>
+              <dc-import name="Button" variant="primary" label="비활성" disabled="true" hint-size="80px,38px"></dc-import>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section data-anchor id="badges" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Badge · Avatar · Chip</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 18px;">뱃지 · 아바타 · 칩</div>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 22px;">
+          <div>
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 12px;">Badge — 상태 표시</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+              <dc-import name="Badge" tone="published" label="게시됨" hint-size="80px,22px"></dc-import>
+              <dc-import name="Badge" tone="review" label="검토 중" hint-size="80px,22px"></dc-import>
+              <dc-import name="Badge" tone="draft" label="초안" hint-size="64px,22px"></dc-import>
+              <dc-import name="Badge" tone="accent" label="NEW" dot="false" hint-size="56px,22px"></dc-import>
+              <dc-import name="Badge" solid="true" label="12" hint-size="28px,20px"></dc-import>
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 12px;">Avatar — 크기 &amp; 자동 색상</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+              <dc-import name="Avatar" name="김서연" size="xs" hint-size="22px,22px"></dc-import>
+              <dc-import name="Avatar" name="이준호" size="sm" hint-size="26px,26px"></dc-import>
+              <dc-import name="Avatar" name="박민지" size="md" hint-size="34px,34px"></dc-import>
+              <dc-import name="Avatar" name="정태윤" size="lg" hint-size="44px,44px"></dc-import>
+              <dc-import name="Avatar" name="최유진" size="xl" hint-size="64px,64px"></dc-import>
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 12px;">Chip — 삭제 가능 · 선택 · pill</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+              <dc-import name="Chip" label="브랜드" hint-size="90px,30px"></dc-import>
+              <dc-import name="Chip" label="4K" glyph="tag" hint-size="80px,30px"></dc-import>
+              <dc-import name="Chip" label="이미지" selected="true" pill="true" removable="false" hint-size="80px,30px"></dc-import>
+              <dc-import name="Chip" label="영상" removable="false" pill="true" hint-size="64px,30px"></dc-import>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section data-anchor id="forms" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Form</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 18px;">폼 요소</div>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+            <dc-import name="Input" label="제목" placeholder="파일 이름 입력…" hint-size="100%,74px"></dc-import>
+            <dc-import name="Input" label="검색" glyph="search" placeholder="에셋 검색…" hint-size="100%,74px"></dc-import>
+            <dc-import name="Input" label="오류 상태" value="잘못된 값" error="필수 항목입니다." hint-size="100%,96px"></dc-import>
+            <dc-import name="Textarea" label="설명" placeholder="내용을 입력하세요…" hint-size="100%,110px"></dc-import>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding-top: 22px; border-top: 1px solid var(--border);">
+            <div>
+              <div style="font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 13px;">체크박스</div>
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <dc-import name="Checkbox" label="이미지" checked="true" hint-size="120px,20px"></dc-import>
+                <dc-import name="Checkbox" label="영상" checked="false" hint-size="120px,20px"></dc-import>
+                <dc-import name="Checkbox" label="오디오" checked="true" hint-size="120px,20px"></dc-import>
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 13px;">라디오</div>
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <dc-import name="Checkbox" type="radio" label="표준 화질" checked="false" hint-size="120px,20px"></dc-import>
+                <dc-import name="Checkbox" type="radio" label="고화질" checked="true" hint-size="120px,20px"></dc-import>
+                <dc-import name="Checkbox" type="radio" label="원본" checked="false" hint-size="120px,20px"></dc-import>
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 13px;">토글 · 평점</div>
+              <div style="display: flex; flex-direction: column; gap: 14px;">
+                <dc-import name="Toggle" label="알림 받기" checked="true" hint-size="100%,24px"></dc-import>
+                <dc-import name="Toggle" label="자동 저장" checked="false" hint-size="100%,24px"></dc-import>
+                <dc-import name="Rating" value="4" hint-size="120px,24px"></dc-import>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section data-anchor id="dropdowns" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Dropdown</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">드롭다운</div>
+        <div style="font-size: 13.5px; color: var(--text-2); margin-bottom: 18px;">네이티브가 아닌 커스텀 팝오버. 클릭해서 열어 보세요.</div>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <dc-import name="Select" label="카테고리" value="브랜드" options="{{ categoryOpts }}" hint-size="100%,74px"></dc-import>
+            <dc-import name="Select" label="담당자" with-avatars="true" value="김서연" options="{{ userOpts }}" hint-size="100%,74px"></dc-import>
+            <dc-import name="MultiSelect" label="사용 채널" values="{{ channelVals }}" options="{{ channelOpts }}" hint-size="100%,74px"></dc-import>
+            <dc-import name="MultiSelect" label="협업자" with-avatars="true" values="{{ collabVals }}" options="{{ userOpts }}" hint-size="100%,74px"></dc-import>
+          </div>
+        </div>
+      </section>
+
+      <section data-anchor id="data" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Data · Card</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 18px;">데이터 · 카드</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
+          <dc-import name="StatCard" label="총 에셋" value="12,480" glyph="image" delta="+4.2%" hint-size="100%,116px"></dc-import>
+          <dc-import name="StatCard" label="이번 달 업로드" value="1,284" glyph="upload" delta="+12%" hint-size="100%,116px"></dc-import>
+          <dc-import name="StatCard" label="검토 대기" value="23" glyph="clock" delta="-8%" delta-up="false" hint-size="100%,116px"></dc-import>
+          <dc-import name="StatCard" label="컬렉션" value="48" glyph="folder" delta="+3" hint-size="100%,116px"></dc-import>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
+          <dc-import name="AssetCard" name="sunset_coast.mp4" type="video" size="248 MB" dim="3840×2160" status="published" dur="01:24" tone="0.68" hint-size="100%,210px"></dc-import>
+          <dc-import name="AssetCard" name="brand_hero_02.jpg" type="image" size="8.4 MB" dim="6000×4000" status="review" tone="0.6" hint-size="100%,210px"></dc-import>
+          <dc-import name="AssetCard" name="product.png" type="image" size="3.1 MB" dim="2400×1600" status="published" tone="0.82" hint-size="100%,210px"></dc-import>
+          <dc-import name="AssetCard" name="promo_teaser.mp4" type="video" size="96 MB" dim="1920×1080" status="draft" dur="00:32" tone="0.48" hint-size="100%,210px"></dc-import>
+        </div>
+        <div style="font-size: 12px; color: var(--text-3); margin-bottom: 12px;">DataTable — 컬럼/행 설정형, 선택 가능</div>
+        <dc-import name="DataTable" columns="{{ tableColumns }}" rows="{{ tableRows }}" selectable="true" hint-size="100%,400px"></dc-import>
+      </section>
+
+      <section data-anchor id="nav" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Navigation</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 18px;">내비게이션</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px;">
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 14px;">Tabs — segment</div>
+            <dc-import name="Tabs" variant="segment" tabs="{{ segTabs }}" hint-size="220px,38px"></dc-import>
+            <div style="font-size: 12px; color: var(--text-3); margin: 22px 0 14px;">Tabs — underline</div>
+            <dc-import name="Tabs" variant="underline" tabs="{{ underTabs }}" hint-size="100%,42px"></dc-import>
+          </div>
+          <div>
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 14px;">Accordion</div>
+            <dc-import name="Accordion" items="{{ accordionItems }}" default-open="0" hint-size="100%,200px"></dc-import>
+          </div>
+        </div>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 22px;">
+          <div>
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 14px;">Breadcrumb</div>
+            <dc-import name="Breadcrumb" items="{{ crumbItems }}" hint-size="100%,24px"></dc-import>
+          </div>
+          <div>
+            <div style="font-size: 12px; color: var(--text-3); margin-bottom: 14px;">Pagination</div>
+            <dc-import name="Pagination" page="3" total="12" hint-size="420px,34px"></dc-import>
+          </div>
+        </div>
+      </section>
+
+      <section data-anchor id="overlays" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Overlay · Feedback</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 18px;">오버레이 · 피드백</div>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px;">
+          <div style="font-size: 12px; color: var(--text-3); margin-bottom: 14px;">Toast — 인라인 예시</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px;">
+            <dc-import name="Toast" tone="success" message="변경사항이 저장되었습니다" inline="true" dismissable="false" hint-size="300px,58px"></dc-import>
+            <dc-import name="Toast" tone="error" message="업로드에 실패했습니다" inline="true" dismissable="false" hint-size="300px,58px"></dc-import>
+            <dc-import name="Toast" tone="info" message="3개 항목이 대기열에 추가됨" inline="true" dismissable="false" hint-size="300px,58px"></dc-import>
+          </div>
+          <div style="font-size: 12px; color: var(--text-3); margin-bottom: 14px; padding-top: 22px; border-top: 1px solid var(--border);">트리거 — 클릭해서 실행</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            <button onClick="{{ onOpenModal }}" style="display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 16px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-1); font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;" style-hover="background: var(--bg-hover);"><ds-icon glyph="alert" size="16"></ds-icon>모달 열기</button>
+            <button onClick="{{ onOpenDrawer }}" style="display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 16px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-1); font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;" style-hover="background: var(--bg-hover);"><ds-icon glyph="upload" size="16"></ds-icon>드로어 열기</button>
+            <button onClick="{{ onFireToast }}" style="display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 16px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--ok-fg); font-size: 13.5px; font-weight: 500; cursor: pointer; font-family: inherit;" style-hover="background: var(--ok-bg);"><ds-icon glyph="checkCircle" size="16"></ds-icon>토스트 띄우기</button>
+          </div>
+        </div>
+      </section>
+
+      <section data-anchor id="metadata" style="margin-bottom: 52px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">MetaField</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">메타데이터 필드</div>
+        <div style="font-size: 13.5px; color: var(--text-2); margin-bottom: 18px;">타입에 따라 값을 알맞은 형태로 렌더링 — 상세보기에서 사용됩니다.</div>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 6px 20px;">
+          <dc-import name="MetaField" label="제목" type="text" value="여름 해안 드론 영상 — 4K" required="true" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="카테고리" type="select" value="브랜드" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="사용 채널" type="multiselect" value="{{ channelVals }}" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="촬영일" type="date" value="2026-06-25" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="사용 기간" type="daterange" value="{{ rangeVal }}" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="담당자" type="user" value="김서연" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="협업자" type="multiuser" value="{{ collabVals }}" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="원본 링크" type="url" value="drive.frame.io/a/8f2c" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="품질 평점" type="rating" value="4" hint-size="100%,54px"></dc-import>
+          <dc-import name="MetaField" label="승인 완료" type="boolean" value="{{ boolTrue }}" hint-size="100%,54px"></dc-import>
+        </div>
+      </section>
+
+      <section data-anchor id="layout" style="margin-bottom: 40px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;">Layout</div>
+        <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">레이아웃</div>
+        <div style="font-size: 13.5px; color: var(--text-2); margin-bottom: 18px;">Sidebar · Topbar를 조합한 AppShell — 모든 화면의 공통 프레임입니다.</div>
+        <div style="border: 1px solid var(--border); border-radius: 14px; overflow: hidden; height: 560px; box-shadow: var(--shadow-md);">
+          <dc-import name="AppShell" active="library" page-title="미디어 라이브러리" hint-size="100%,560px">
+            <div style="padding: 32px 36px;">
+              <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px;">미디어 라이브러리</div>
+              <div style="font-size: 14px; color: var(--text-2); margin-bottom: 24px;">AppShell 안에 임의의 콘텐츠를 넣을 수 있습니다.</div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px;">
+                <dc-import name="AssetCard" name="sunset_coast.mp4" type="video" size="248 MB" dim="3840×2160" status="published" dur="01:24" tone="0.68" hint-size="100%,210px"></dc-import>
+                <dc-import name="AssetCard" name="brand_hero.jpg" type="image" size="8.4 MB" dim="6000×4000" status="review" tone="0.6" hint-size="100%,210px"></dc-import>
+                <dc-import name="AssetCard" name="product.png" type="image" size="3.1 MB" dim="2400×1600" status="published" tone="0.82" hint-size="100%,210px"></dc-import>
+                <dc-import name="AssetCard" name="promo.mp4" type="video" size="96 MB" dim="1920×1080" status="draft" dur="00:32" tone="0.48" hint-size="100%,210px"></dc-import>
+              </div>
+            </div>
+          </dc-import>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <dc-import name="Modal" open="{{ modalOpen }}" tone="danger" glyph="trash" title="선택한 에셋을 삭제할까요?" body="이 작업은 되돌릴 수 없습니다. 선택한 항목이 워크스페이스에서 영구적으로 제거됩니다." confirm-label="삭제" on-close="{{ onCloseOverlay }}" on-confirm="{{ onConfirmDelete }}" hint-size="0,0"></dc-import>
+
+  <dc-import name="Drawer" open="{{ drawerOpen }}" title="새 미디어 업로드" confirm-label="업로드 시작" on-close="{{ onCloseOverlay }}" on-confirm="{{ onCloseOverlay }}" hint-size="0,0">
+    <div style="display: flex; flex-direction: column; gap: 18px;">
+      <div style="border: 1.5px dashed var(--border-strong); border-radius: 12px; padding: 30px 20px; text-align: center; background: var(--bg-subtle);">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: var(--accent-subtle); color: var(--accent-text); display: grid; place-items: center; margin: 0 auto 12px;"><ds-icon glyph="upload" size="20"></ds-icon></div>
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">파일을 드래그하세요</div>
+        <div style="font-size: 12.5px; color: var(--text-3);">또는 클릭하여 찾아보기 · 최대 2GB</div>
+      </div>
+      <dc-import name="Input" label="제목" required="true" placeholder="미디어 제목" hint-size="100%,74px"></dc-import>
+      <dc-import name="Select" label="컬렉션" value="브랜드 캠페인 2026" options="{{ collectionOpts }}" hint-size="100%,74px"></dc-import>
+    </div>
+  </dc-import>
+
+  <dc-import name="Toast" open="{{ toastOpen }}" tone="success" message="업로드가 시작되었습니다" inline="false" on-close="{{ onCloseToast }}" hint-size="0,0"></dc-import>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1180, &quot;height&quot;: 900}}">
+class Component extends DCLogic {
+  state = { theme: 'light', modalOpen: false, drawerOpen: false, toastOpen: false };
+
+  componentDidUpdate(prevProps, prevState) {
+    if (!prevState || prevState.theme !== this.state.theme) {
+      try { document.documentElement.dataset.theme = this.state.theme; } catch (e) {}
+    }
+  }
+  componentDidMount() { try { document.documentElement.dataset.theme = this.state.theme; } catch (e) {} }
+
+  renderVals() {
+    const dark = this.state.theme === 'dark';
+
+    const navLinks = [
+      { label: '파운데이션', href: '#foundation' },
+      { label: '버튼', href: '#buttons' },
+      { label: '뱃지 · 아바타 · 칩', href: '#badges' },
+      { label: '폼 요소', href: '#forms' },
+      { label: '드롭다운', href: '#dropdowns' },
+      { label: '데이터 · 카드', href: '#data' },
+      { label: '내비게이션', href: '#nav' },
+      { label: '오버레이 · 피드백', href: '#overlays' },
+      { label: '메타데이터 필드', href: '#metadata' },
+      { label: '레이아웃', href: '#layout' },
+    ];
+
+    const swatches = [
+      { label: 'App', token: '--bg-app', value: 'var(--bg-app)' },
+      { label: 'Surface', token: '--bg-surface', value: 'var(--bg-surface)' },
+      { label: 'Subtle', token: '--bg-subtle', value: 'var(--bg-subtle)' },
+      { label: 'Border', token: '--border', value: 'var(--border)' },
+      { label: 'Text 1', token: '--text-1', value: 'var(--text-1)' },
+      { label: 'Text 2', token: '--text-2', value: 'var(--text-2)' },
+      { label: 'Text 3', token: '--text-3', value: 'var(--text-3)' },
+      { label: 'Accent', token: '--accent', value: 'var(--accent)' },
+      { label: 'Accent Subtle', token: '--accent-subtle', value: 'var(--accent-subtle)' },
+      { label: 'Success', token: '--ok', value: 'var(--ok)' },
+      { label: 'Warning', token: '--warn', value: 'var(--warn)' },
+      { label: 'Danger', token: '--danger', value: 'var(--danger)' },
+    ];
+
+    const typeScale = [
+      { meta: '28 / 700', style: 'font-size: 28px; font-weight: 700; letter-spacing: -0.03em; color: var(--text-1);', sample: '미디어 콘텐츠 관리' },
+      { meta: '20 / 700', style: 'font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-1);', sample: '섹션 제목 Heading' },
+      { meta: '15 / 600', style: 'font-size: 15px; font-weight: 600; color: var(--text-1);', sample: '카드 제목 Subtitle' },
+      { meta: '14 / 400', style: 'font-size: 14px; font-weight: 400; color: var(--text-2); line-height: 1.6;', sample: '본문 텍스트입니다. 읽기 편안한 휴머니스트 산세리프를 사용합니다.' },
+      { meta: '12 / 500 mono', style: "font-size: 12.5px; font-weight: 500; color: var(--text-3); font-family: 'IBM Plex Mono', monospace;", sample: 'sunset_coast_4k.mp4' },
+    ];
+
+    const categoryOpts = ['브랜드', '제품', '이벤트', '팀'];
+    const userOpts = ['김서연', '이준호', '박민지', '정태윤'];
+    const channelOpts = ['웹', '소셜', '인쇄', '이메일'];
+    const collectionOpts = ['브랜드 캠페인 2026', '제품 사진', '이벤트 아카이브'];
+
+    const tableColumns = [
+      { key: 'name', label: '이름', type: 'mono', width: '2.2fr' },
+      { key: 'type', label: '유형', type: 'iconText', width: '1fr' },
+      { key: 'size', label: '크기', type: 'text', muted: true, width: '1fr' },
+      { key: 'status', label: '상태', type: 'badge', width: '1fr' },
+      { key: 'owner', label: '담당자', type: 'avatar', width: '1.3fr' },
+      { key: 'actions', label: '', type: 'actions', width: '52px', align: 'right' },
+    ];
+    const tableRows = [
+      { id: 'a1', name: 'sunset_coast_4k.mp4', type: { text: '영상', glyph: 'film' }, size: '248 MB', status: 'published', owner: '김서연' },
+      { id: 'a2', name: 'brand_hero_02.jpg', type: { text: '이미지', glyph: 'image' }, size: '8.4 MB', status: 'review', owner: '이준호' },
+      { id: 'a3', name: 'product_launch.png', type: { text: '이미지', glyph: 'image' }, size: '3.1 MB', status: 'published', owner: '김서연' },
+      { id: 'a4', name: 'promo_teaser.mp4', type: { text: '영상', glyph: 'film' }, size: '96 MB', status: 'draft', owner: '박민지' },
+      { id: 'a5', name: 'packaging_flat.jpg', type: { text: '이미지', glyph: 'image' }, size: '12.2 MB', status: 'published', owner: '정태윤' },
+    ];
+
+    const accordionItems = [
+      { id: 'a1', q: '어떤 파일 형식을 지원하나요?', a: 'JPEG, PNG, SVG, WebP 등 주요 이미지 형식과 MP4, MOV, WebM 영상, WAV, MP3 오디오를 지원합니다. 단일 파일은 최대 2GB까지 업로드할 수 있습니다.' },
+      { id: 'a2', q: '자동 태깅은 어떻게 동작하나요?', a: '업로드 시 AI가 이미지·영상의 내용을 분석해 관련 태그를 자동으로 제안합니다. 제안된 태그는 언제든 편집·삭제할 수 있습니다.' },
+      { id: 'a3', q: '팀원을 어떻게 초대하나요?', a: '설정 → 팀 멤버에서 이메일로 초대장을 보낼 수 있으며, 관리자·편집자·뷰어 역할을 지정할 수 있습니다.' },
+    ];
+
+    const crumbItems = ['Frame', '브랜드 캠페인 2026', 'sunset_coast_4k.mp4'];
+
+    return {
+      theme: this.state.theme,
+      themeGlyph: dark ? 'sun' : 'moon',
+      themeLabel: dark ? '라이트' : '다크',
+      onToggleTheme: () => this.setState(s => ({ theme: s.theme === 'light' ? 'dark' : 'light' })),
+
+      navLinks, swatches, typeScale,
+      categoryOpts, userOpts, channelOpts, collectionOpts,
+      channelVals: ['웹', '소셜'],
+      collabVals: ['이준호', '박민지'],
+      rangeVal: ['2026-07-01', '2026-12-31'],
+      boolTrue: true,
+      segTabs: ['전체', '이미지', '영상'],
+      underTabs: ['메타데이터', '버전 기록', '활동'],
+      accordionItems, crumbItems,
+      tableColumns, tableRows,
+
+      modalOpen: this.state.modalOpen,
+      drawerOpen: this.state.drawerOpen,
+      toastOpen: this.state.toastOpen,
+      onOpenModal: () => this.setState({ modalOpen: true }),
+      onOpenDrawer: () => this.setState({ drawerOpen: true }),
+      onCloseOverlay: () => this.setState({ modalOpen: false, drawerOpen: false }),
+      onConfirmDelete: () => this.setState({ modalOpen: false }),
+      onFireToast: () => { if (this._t) clearTimeout(this._t); this.setState({ toastOpen: true }); this._t = setTimeout(() => this.setState({ toastOpen: false }), 3200); },
+      onCloseToast: () => { if (this._t) clearTimeout(this._t); this.setState({ toastOpen: false }); },
+    };
+  }
+}
+</script>
+</body>
+</html>

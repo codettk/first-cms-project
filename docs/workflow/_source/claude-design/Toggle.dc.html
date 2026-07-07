@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --border-strong: oklch(0.85 0.006 265);
+    --text-1: oklch(0.245 0.012 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --shadow-sm: 0 1px 2px oklch(0.2 0.02 265 / 0.06);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --border-strong: oklch(0.38 0.01 265);
+    --text-1: oklch(0.96 0.003 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+  }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="{{ wrapStyle }}" onClick="{{ onToggle }}">
+  <sc-if value="{{ hasText }}">
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-size: 13.5px; font-weight: 500; color: var(--text-1); font-family: 'IBM Plex Sans KR', sans-serif;">{{ label }}</div>
+      <sc-if value="{{ showDesc }}"><div style="font-size: 12px; color: var(--text-3); margin-top: 2px; font-family: 'IBM Plex Sans KR', sans-serif; line-height: 1.45;">{{ description }}</div></sc-if>
+    </div>
+  </sc-if>
+  <span style="{{ trackStyle }}"><span style="{{ knobStyle }}"></span></span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 280, &quot;height&quot;: 64}, &quot;checked&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;label&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;알림 받기&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;description&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { on: null };
+  get isOn() { return this.state.on == null ? (this.props.checked === true || this.props.checked === 'true') : this.state.on; }
+  renderVals() {
+    const p = this.props;
+    const label = p.label ?? '';
+    const description = p.description ?? '';
+    const hasText = !!label;
+    const on = this.isOn;
+    return {
+      label, description, hasText,
+      showDesc: !!description,
+      wrapStyle: `display: flex; align-items: center; gap: 14px; cursor: pointer; user-select: none; ${hasText ? '' : 'width: fit-content;'}`,
+      trackStyle: `width: 42px; height: 24px; border-radius: 20px; position: relative; flex-shrink: 0; transition: background .15s; background: ${on ? 'var(--accent)' : 'var(--border-strong)'};`,
+      knobStyle: `position: absolute; top: 2px; left: ${on ? '20px' : '2px'}; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm); transition: left .15s;`,
+      onToggle: () => {
+        const next = !on;
+        this.setState({ on: next });
+        if (this.props.onChange) this.props.onChange(next);
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

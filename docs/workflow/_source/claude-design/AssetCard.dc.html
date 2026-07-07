@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265); --border: oklch(0.918 0.004 265); --border-strong: oklch(0.85 0.006 265);
+    --text-1: oklch(0.245 0.012 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-fg: oklch(0.99 0 0);
+    --ok: oklch(0.62 0.09 155); --ok-bg: oklch(0.95 0.03 155); --ok-fg: oklch(0.44 0.08 155);
+    --warn: oklch(0.72 0.1 75); --warn-bg: oklch(0.96 0.04 82); --warn-fg: oklch(0.5 0.09 62);
+    --shadow-md: 0 4px 16px oklch(0.2 0.02 265 / 0.09), 0 1px 3px oklch(0.2 0.02 265 / 0.06);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265); --border: oklch(0.29 0.007 265); --border-strong: oklch(0.38 0.01 265);
+    --text-1: oklch(0.96 0.003 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-fg: oklch(0.16 0.02 264);
+    --ok: oklch(0.7 0.12 155); --ok-bg: oklch(0.31 0.05 155); --ok-fg: oklch(0.84 0.1 155);
+    --warn: oklch(0.8 0.12 82); --warn-bg: oklch(0.33 0.05 78); --warn-fg: oklch(0.88 0.1 85);
+    --shadow-md: 0 4px 16px oklch(0 0 0 / 0.4), 0 1px 3px oklch(0 0 0 / 0.3);
+  }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div onClick="{{ onOpen }}" style="{{ rootStyle }}" style-hover="border-color: var(--border-strong); box-shadow: var(--shadow-md);">
+  <div style="aspect-ratio: 4/3; position: relative; {{ thumbStyle }}">
+    <span style="position: absolute; top: 9px; left: 9px; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; color: #fff; background: oklch(0.2 0.02 265 / 0.55); backdrop-filter: blur(4px); padding: 3px 8px; border-radius: 20px;"><ds-icon glyph="{{ typeGlyph }}" size="12" sw="1.8"></ds-icon>{{ typeLabel }}</span>
+    <button onClick="{{ onToggle }}" style="position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid #fff; background: oklch(0.2 0.02 265 / 0.3); cursor: pointer; display: grid; place-items: center; padding: 0;">
+      <sc-if value="{{ selected }}"><span style="position: absolute; inset: -1.5px; border-radius: 6px; background: var(--accent); display: grid; place-items: center; color: var(--accent-fg);"><ds-icon glyph="check" size="13" sw="2.4"></ds-icon></span></sc-if>
+    </button>
+    <sc-if value="{{ isVideo }}">
+      <div style="position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;"><span style="width: 40px; height: 40px; border-radius: 50%; background: oklch(0.15 0.02 265 / 0.5); backdrop-filter: blur(4px); display: grid; place-items: center; color: #fff;"><ds-icon glyph="play" size="18" fill="currentColor"></ds-icon></span></div>
+      <span style="position: absolute; bottom: 9px; right: 9px; font-size: 11px; font-weight: 600; color: #fff; background: oklch(0.15 0.02 265 / 0.6); padding: 2px 7px; border-radius: 5px; font-family: 'IBM Plex Mono', monospace;">{{ dur }}</span>
+    </sc-if>
+    <sc-if value="{{ selected }}"><div style="position: absolute; inset: 0; border: 2.5px solid var(--accent); border-radius: 12px; pointer-events: none;"></div></sc-if>
+  </div>
+  <div style="padding: 11px 12px;">
+    <div style="font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'IBM Plex Mono', monospace; margin-bottom: 7px; color: var(--text-1);">{{ name }}</div>
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+      <span style="font-size: 11.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'IBM Plex Mono', monospace;">{{ metaLine }}</span>
+      <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; background: {{ statusBg }}; color: {{ statusFg }};"><span style="width: 5px; height: 5px; border-radius: 50%; background: {{ statusDot }};"></span>{{ statusKo }}</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 230, &quot;height&quot;: 220}, &quot;name&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;sunset_coast_4k.mp4&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;type&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;image&quot;, &quot;video&quot;], &quot;default&quot;: &quot;video&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;size&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;248 MB&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;dim&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;3840×2160&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;status&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;published&quot;, &quot;review&quot;, &quot;draft&quot;], &quot;default&quot;: &quot;published&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;dur&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;01:24&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;tone&quot;: {&quot;editor&quot;: &quot;float&quot;, &quot;default&quot;: 0.66, &quot;min&quot;: 0.2, &quot;max&quot;: 0.9, &quot;step&quot;: 0.02, &quot;tsType&quot;: &quot;number&quot;}, &quot;selected&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { sel: null };
+  get selected() { const p = this.props; const pv = (p.selected === true || p.selected === 'true'); if (p.onToggle) return pv; return this.state.sel == null ? pv : this.state.sel; }
+  renderVals() {
+    const p = this.props;
+    const type = p.type ?? 'image';
+    const isVideo = type === 'video';
+    const tone = Number(p.tone == null ? 0.66 : p.tone) || 0.66;
+    const a = tone.toFixed(3);
+    const b = Math.max(0.1, tone - 0.05).toFixed(3);
+    const status = p.status ?? 'published';
+    const stMap = {
+      published: { ko: '게시됨', dot: 'var(--ok)', bg: 'var(--ok-bg)', fg: 'var(--ok-fg)' },
+      review: { ko: '검토 중', dot: 'var(--warn)', bg: 'var(--warn-bg)', fg: 'var(--warn-fg)' },
+      draft: { ko: '초안', dot: 'var(--text-3)', bg: 'var(--bg-subtle)', fg: 'var(--text-3)' },
+    };
+    const st = stMap[status] || stMap.published;
+    return {
+      name: p.name ?? 'asset.jpg',
+      isVideo, dur: p.dur ?? '',
+      typeGlyph: isVideo ? 'film' : 'image',
+      typeLabel: isVideo ? '영상' : '이미지',
+      metaLine: `${p.dim ?? ''} · ${p.size ?? ''}`,
+      selected: this.selected,
+      statusKo: st.ko, statusDot: st.dot, statusBg: st.bg, statusFg: st.fg,
+      rootStyle: 'position: relative; cursor: pointer; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--bg-surface); transition: box-shadow .15s, border-color .15s; font-family: sans-serif;',
+      thumbStyle: `background: repeating-linear-gradient(135deg, oklch(${a} 0.008 265) 0 13px, oklch(${b} 0.008 265) 13px 26px);`,
+      onOpen: p.onOpen || (() => {}),
+      onToggle: (e) => { if (e && e.stopPropagation) e.stopPropagation(); const n = !this.selected; if (!p.onToggle) this.setState({ sel: n }); if (p.onToggle) p.onToggle(n); },
+    };
+  }
+}
+</script>
+</body>
+</html>

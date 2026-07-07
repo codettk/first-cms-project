@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; }
+  doc-page .muted { color: #6b7080; }
+  doc-page .ok { color: #2c6e49; font-weight: 700; }
+  doc-page .no { color: #b23a3a; font-weight: 700; }
+  doc-page .dash { color: #b0b4c0; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Workflow State Machine Implementation Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Workflow State Machine Implementation Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">워크플로우 상태 기계 구현 명세서 — Laravel + PostgreSQL 상태 전이 검증 기준</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: Job Type Definition v1.0 · DB Table Spec v1.0 · Queue &amp; Worker Spec v1.0</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>본 문서는 워크플로우에서 발생하는 <b>모든 상태 전이를 단일 기준으로 관리</b>하고, 잘못된 상태 전이·중복 실행·Worker 장애·수동 재시도·PUBLISH 오판정을 방지하기 위한 구현 기준을 정의한다. 5개 상태 관리 대상(<code>contents</code>, <code>workflow_instances</code>, <code>workflow_jobs</code>, <code>workflow_worker_agents</code>, <code>search_index_states</code>)의 상태값·전이표·전환 주체를 확정하고, Laravel StateMachine 서비스와 PostgreSQL 방어선의 역할 분담을 명시한다.</p>
+
+  <h2>2. 상태 관리 대상 요약</h2>
+  <table>
+    <tr><th style="width: 175px;">대상</th><th>상태값</th><th style="width: 110px;">종결 상태</th><th style="width: 90px;">수동 개입</th></tr>
+    <tr><td><code>contents.status</code></td><td>UPLOADING · REGISTERED · PROCESSING · READY · FAILED · ARCHIVED · DELETED</td><td>DELETED</td><td>가능 (§18)</td></tr>
+    <tr><td><code>workflow_instances.status</code></td><td>RUNNING · SUCCESS · FAILED · CANCELED</td><td>RUNNING 외 전부</td><td>취소만</td></tr>
+    <tr><td><code>workflow_jobs.status</code></td><td>WAITING · READY · RUNNING · SUCCESS · FAILED · RETRY · SKIPPED · CANCELED · TIMEOUT</td><td>SUCCESS · SKIPPED · CANCELED</td><td>재시도·취소</td></tr>
+    <tr><td><code>workflow_worker_agents.status</code></td><td>ONLINE · OFFLINE · BUSY · DISABLED · ERROR</td><td>없음 (순환)</td><td>DISABLED·ERROR 해제</td></tr>
+    <tr><td><code>search_index_states.status</code></td><td>PENDING · INDEXED · STALE · FAILED</td><td>없음 (순환)</td><td>재색인</td></tr>
+  </table>
+  <p class="muted">FAILED(jobs)는 준종결 상태 — Admin의 RETRY 전이만 허용. 전환 주체·조건은 각 절의 전이표에 명시한다.</p>
+
+  <h2>3. contents.status 상태 기계</h2>
+  <table>
+    <tr><th style="width: 105px;">상태</th><th>의미</th></tr>
+    <tr><td><code>UPLOADING</code></td><td>업로드 진행 중 — 파일 미확정</td></tr>
+    <tr><td><code>REGISTERED</code></td><td>업로드·등록 완료, 워크플로우 시작 전</td></tr>
+    <tr><td><code>PROCESSING</code></td><td>워크플로우 인스턴스 실행 중</td></tr>
+    <tr><td><code>READY</code></td><td>서비스 가능 — 웹 표출 허용되는 유일한 상태</td></tr>
+    <tr><td><code>FAILED</code></td><td>필수 작업 최종 실패 — 재처리 대상</td></tr>
+    <tr><td><code>ARCHIVED</code></td><td>보관 전환 — 웹 비표출, 원본 보존</td></tr>
+    <tr><td><code>DELETED</code></td><td>삭제 확정 — 종결, 어떤 전이도 불가</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 210px;">허용 전이</th><th style="width: 130px;">주체</th><th>조건</th></tr>
+    <tr><td>UPLOADING → REGISTERED</td><td>CMS Web</td><td>업로드 완료 + media_files 생성</td></tr>
+    <tr><td>UPLOADING → FAILED</td><td>CMS Web / System</td><td>업로드 중단·세션 만료</td></tr>
+    <tr><td>REGISTERED → PROCESSING</td><td>Scheduler</td><td>인스턴스 + jobs 생성 완료</td></tr>
+    <tr><td>PROCESSING → READY</td><td>PUBLISH Job</td><td>§8 판정 통과</td></tr>
+    <tr><td>PROCESSING → FAILED</td><td>Scheduler / System</td><td>필수 job 최종 FAILED</td></tr>
+    <tr><td>FAILED → PROCESSING</td><td>Admin</td><td>재처리 — 새 인스턴스 생성과 원자적</td></tr>
+    <tr><td>FAILED → DELETED</td><td>Admin</td><td>—</td></tr>
+    <tr><td>READY → PROCESSING</td><td>Admin / System</td><td>재처리(프로파일 변경 등) — 기존 rendition은 유지, 완료 시 교체</td></tr>
+    <tr><td>READY → ARCHIVED</td><td>Admin / System(보존 정책)</td><td>—</td></tr>
+    <tr><td>READY → DELETED</td><td>Admin</td><td>—</td></tr>
+    <tr><td>ARCHIVED → READY</td><td>Admin</td><td>rendition 무결성 검사 통과 시</td></tr>
+    <tr><td>ARCHIVED → PROCESSING</td><td>Admin</td><td><b>복원 후 재처리 정책이 활성일 때만</b></td></tr>
+    <tr><td>ARCHIVED → DELETED</td><td>Admin</td><td>—</td></tr>
+  </table>
+  <p><b>금지 전이</b>: <span class="no">DELETED → (모든 상태)</span> · <span class="no">READY → UPLOADING</span> · <span class="no">REGISTERED → READY</span> (PROCESSING 우회 금지) · <span class="no">FAILED → READY</span> (재처리 없이 직접 게시 금지). DELETED 콘텐츠에는 job 생성 자체를 금지한다(INSERT 가드).</p>
+
+  <h2>4. workflow_instances.status 상태 기계</h2>
+  <table>
+    <tr><th style="width: 210px;">전이</th><th style="width: 130px;">주체</th><th>조건</th></tr>
+    <tr><td>(생성) → RUNNING</td><td>Scheduler / CMS Web</td><td>인스턴스 생성 시 초기값</td></tr>
+    <tr><td>RUNNING → SUCCESS</td><td>PUBLISH Job</td><td>PUBLISH SUCCESS와 동일 트랜잭션</td></tr>
+    <tr><td>RUNNING → FAILED</td><td>Scheduler</td><td>필수 job 최종 FAILED</td></tr>
+    <tr><td>RUNNING → CANCELED</td><td>Admin / System</td><td>수동 취소·콘텐츠 삭제</td></tr>
+  </table>
+  <p>SUCCESS / FAILED / CANCELED는 <b>종결 상태</b>다 — 어떤 경우에도 RUNNING으로 되돌리지 않는다. <b>재처리는 항상 새 workflow_instance 생성</b>으로 수행한다(콘텐츠당 RUNNING 인스턴스 1건 제약은 partial UNIQUE로 보장). 이로써 실행 이력이 인스턴스 단위로 완전하게 보존된다.</p>
+
+  <h2>5. workflow_jobs.status 상태 기계</h2>
+  <table>
+    <tr><th style="width: 90px;">상태</th><th>의미</th></tr>
+    <tr><td><code>WAITING</code></td><td>선행 작업 대기</td></tr>
+    <tr><td><code>READY</code></td><td>실행 가능 — Claim 대상</td></tr>
+    <tr><td><code>RUNNING</code></td><td>Worker 실행 중 (lock 보유)</td></tr>
+    <tr><td><code>SUCCESS</code></td><td>성공 — 종결</td></tr>
+    <tr><td><code>FAILED</code></td><td>최종 실패 — 준종결 (Admin RETRY만 허용)</td></tr>
+    <tr><td><code>RETRY</code></td><td>재시도 대기 (next_attempt_at 예약)</td></tr>
+    <tr><td><code>SKIPPED</code></td><td>조건에 의해 생략 — 종결</td></tr>
+    <tr><td><code>CANCELED</code></td><td>취소 — 종결</td></tr>
+    <tr><td><code>TIMEOUT</code></td><td>시간 초과 — RETRY/FAILED로 즉시 재분류되는 중간 상태</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 90px;">From \ To</th><th>READY</th><th>RUNNING</th><th>SUCCESS</th><th>FAILED</th><th>RETRY</th><th>SKIPPED</th><th>CANCELED</th><th>TIMEOUT</th></tr>
+    <tr><td><code>WAITING</code></td><td class="ok">○ Scheduler</td><td class="no">✕</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○ Scheduler</td><td class="ok">○ Admin/Sys</td><td class="dash">—</td></tr>
+    <tr><td><code>READY</code></td><td class="dash">—</td><td class="ok">○ Worker</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○ Scheduler</td><td class="ok">○ Admin/Sys</td><td class="dash">—</td></tr>
+    <tr><td><code>RUNNING</code></td><td class="dash">—</td><td class="dash">—</td><td class="ok">○ Worker</td><td class="ok">○ Worker</td><td class="ok">○ Worker/Sched</td><td class="dash">—</td><td class="ok">○ Admin/Sys</td><td class="ok">○ Timeout Mon.</td></tr>
+    <tr><td><code>TIMEOUT</code></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○ Scheduler</td><td class="ok">○ Scheduler</td><td class="dash">—</td><td class="ok">○ Admin</td><td class="dash">—</td></tr>
+    <tr><td><code>RETRY</code></td><td class="ok">○ Scheduler</td><td class="no">✕ (READY 경유)</td><td class="dash">—</td><td class="ok">○ Scheduler</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○ Admin</td><td class="dash">—</td></tr>
+    <tr><td><code>FAILED</code></td><td class="dash">—</td><td class="no">✕</td><td class="no">✕</td><td class="dash">—</td><td class="ok">○ Admin</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+    <tr><td><code>SUCCESS</code></td><td colspan="8" class="no">종결 — 모든 전이 불가 (SUCCESS → RUNNING/FAILED 금지)</td></tr>
+    <tr><td><code>SKIPPED</code></td><td colspan="8" class="no">종결 — 모든 전이 불가 (SKIPPED → READY 금지)</td></tr>
+    <tr><td><code>CANCELED</code></td><td colspan="8" class="no">종결 — 모든 전이 불가 (CANCELED → RUNNING 금지)</td></tr>
+  </table>
+  <p><b>추가 금지</b>: <span class="no">WAITING → RUNNING</span> (READY 우회 금지) · <span class="no">FAILED → SUCCESS</span> (직접 전이 금지 — 반드시 RETRY → READY → RUNNING 경유).</p>
+
+  <h2>6. 상태 전환 주체 요약</h2>
+  <table>
+    <tr><th style="width: 130px;">주체</th><th>담당 전이</th></tr>
+    <tr><td>Scheduler</td><td>WAITING→READY, WAITING/READY→SKIPPED, RETRY→READY, TIMEOUT→RETRY/FAILED, RETRY→FAILED(소진), instances RUNNING→FAILED, contents PROCESSING→FAILED, REGISTERED→PROCESSING</td></tr>
+    <tr><td>Worker</td><td>READY→RUNNING(Claim), RUNNING→SUCCESS/FAILED/RETRY</td></tr>
+    <tr><td>Timeout Monitor</td><td>RUNNING→TIMEOUT (Scheduler 프로세스 내 감시 루프)</td></tr>
+    <tr><td>PUBLISH Job</td><td>contents PROCESSING→READY, instances RUNNING→SUCCESS</td></tr>
+    <tr><td>Admin</td><td>FAILED→RETRY, →CANCELED, contents FAILED→PROCESSING, ARCHIVED 계열, Worker DISABLED/해제</td></tr>
+    <tr><td>CMS Web</td><td>contents UPLOADING→REGISTERED</td></tr>
+    <tr><td>System</td><td>보존 정책 ARCHIVED, 콘텐츠 삭제 시 일괄 CANCELED, Worker OFFLINE 판정</td></tr>
+  </table>
+
+  <h2>7. 필수 / 선택 작업 정책</h2>
+  <table>
+    <tr><th style="width: 170px;">구분</th><th>필수 작업 (is_required=true)</th><th>선택 작업 (is_required=false)</th></tr>
+    <tr><td>최종 FAILED 시 콘텐츠</td><td>FAILED 전환</td><td>영향 없음 (READY 가능)</td></tr>
+    <tr><td>후속 작업</td><td>후속 필수 작업 SKIPPED</td><td>해당 작업만 종료</td></tr>
+    <tr><td>PUBLISH</td><td>차단</td><td>비차단</td></tr>
+    <tr><td>알림</td><td>관리자 즉시 알림</td><td>대시보드 경고 표시만</td></tr>
+    <tr><td>완료 후속</td><td>—</td><td>색인 반영 필요 시 search_index_states → STALE (INDEX 재실행)</td></tr>
+  </table>
+  <p><b>예시 1</b> — 영상의 TC(필수) 최종 실패: TC=FAILED → CA·INDEX·PUBLISH=SKIPPED → instance=FAILED → contents=FAILED → 알림.<br>
+  <b>예시 2</b> — 영상의 OCR(선택) 최종 실패: OCR=FAILED로 기록만, PUBLISH 진행 → contents=READY. 대시보드에 경고. 이후 수동 재시도 성공 시 STALE → INDEX 재실행으로 검색 품질 보강.</p>
+
+  <h2>8. PUBLISH 가능 여부 판정</h2>
+  <p><b>가능 조건(전부 충족)</b>: ① 현재 인스턴스의 필수 job 전체 SUCCESS(SKIPPED 제외 — 단 필수 job의 SKIPPED는 실패 전파이므로 불가) ② MASTER rendition 존재 ③ 유형별 웹 표출 rendition 존재(VIDEO: PROXY_VIDEO+THUMBNAIL / IMAGE: PROXY_IMAGE+THUMBNAIL / AUDIO: PROXY_AUDIO / DOC: PAGE_PREVIEW) ④ INDEX job SUCCESS ⑤ contents.status = PROCESSING ⑥ DELETED/ARCHIVED 아님.</p>
+  <p><b>불가 조건(하나라도 해당)</b>: 필수 job에 FAILED 존재 · 필수 job에 WAITING/READY/RUNNING/RETRY 존재 · 필수 rendition 누락 · INDEX 실패 · 콘텐츠 DELETED.</p>
+  <pre>-- PUBLISH Worker 판정 (단일 트랜잭션)
+BEGIN;
+SELECT status FROM contents WHERE id=:content_id FOR UPDATE;      -- = 'PROCESSING' 확인
+
+SELECT count(*) FILTER (WHERE status &lt;&gt; 'SUCCESS') AS blocking
+FROM workflow_jobs
+WHERE instance_id = :instance_id AND is_required
+  AND job_type &lt;&gt; 'PUBLISH' AND job_type &lt;&gt; 'CLEANUP';            -- 0이어야 함
+
+SELECT bool_and(cnt &gt; 0) FROM (                                     -- 필수 rendition 존재 검사
+  SELECT count(*) cnt FROM media_renditions
+  WHERE content_id=:content_id AND rendition_type = ANY(:required_types)
+  GROUP BY rendition_type) t;
+
+UPDATE contents SET status='READY', published_at=now()
+WHERE id=:content_id AND status='PROCESSING';                       -- CAS
+UPDATE workflow_instances SET status='SUCCESS', finished_at=now()
+WHERE id=:instance_id AND status='RUNNING';
+COMMIT;</pre>
+  <p class="muted">rendition 존재는 DB 행 + 스토리지 파일 실재(stat) 이중 확인. 파일 누락 시 PUBLISH는 FAILED 처리하고 해당 생성 job의 수동 재실행을 유도한다(§19-6).</p>
+
+  <h2>9. 재시도 정책</h2>
+  <ul>
+    <li><b>RUNNING → RETRY</b> (Worker: 일시적 실패 / Scheduler: lease 만료 회수), <b>TIMEOUT → RETRY</b> (Scheduler), <b>FAILED → RETRY</b> (Admin 수동), <b>RETRY → READY</b> (Scheduler: next_attempt_at 도래).</li>
+    <li><code>retry_count</code> 증가 시점: <b>RETRY 상태의 job을 Claim하여 RUNNING으로 전환하는 순간</b> (Claim 트랜잭션 내). 전환 실패·회수는 카운트하지 않는다.</li>
+    <li><code>retry_count ≥ max_retry</code>: Scheduler가 RETRY→FAILED 확정 (RETRY 재개 단계에서 검사).</li>
+    <li><code>next_attempt_at = now() + base × 2^retry_count</code> — base 1분, 상한 30분 (INDEX: base 30초).</li>
+    <li><b>수동 재시도</b>: <code>retry_count = 0</code>으로 초기화, FAILED→RETRY, actor=<code>admin:{user_id}</code>. 기존 logs/histories는 <b>전부 보존</b> — 새 실행은 <code>attempt_no</code> 증가로 구분.</li>
+    <li><b>rendition 처리</b>: 재실행은 삭제가 아닌 <b>upsert</b> — 동일 <code>(content_id, rendition_type, page_no/timecode_ms)</code> 키의 행과 파일을 덮어쓴다. 파일 교체는 임시 경로에 쓴 뒤 원자적 rename으로 반영(부분 쓰기 노출 방지).</li>
+  </ul>
+
+  <h2>10. TIMEOUT 정책</h2>
+  <ul>
+    <li>판단 주체는 <b>Scheduler(Timeout Monitor)</b>다 — Worker 자체 판단에 의존하지 않는다(죽은 Worker는 판단 불가).</li>
+    <li>조건: <code>status='RUNNING' AND started_at + timeout_sec &lt; now()</code>.</li>
+    <li>처리(단일 트랜잭션): RUNNING→TIMEOUT 전이 + history 기록 → lock DELETE → <code>retry_count &lt; max_retry</code>면 TIMEOUT→RETRY(+백오프), 아니면 TIMEOUT→FAILED. 각 전이마다 history(actor=system, note=timeout).</li>
+    <li><b>늦은 결과 폐기(fencing)</b>: 죽었다 살아난 Worker의 완료 UPDATE는 <code>WHERE id=? AND status='RUNNING' AND worker_id=:me</code> 조건으로 0행 갱신 → 결과 폐기, 로그에 WARN 기록.</li>
+  </ul>
+
+  <h2>11. CANCELED 정책</h2>
+  <ul>
+    <li><b>WAITING/READY 취소</b>: 즉시 CANCELED 전이 + history. lock 없음.</li>
+    <li><b>RUNNING 취소</b>: ① job에 <code>cancel_requested_at</code> 마킹(또는 별도 신호 테이블) ② Worker가 heartbeat 주기마다 확인 후 실행 중단·부분 산출물 정리 ③ Worker가 RUNNING→CANCELED 전이 + lock 해제. Worker가 30초(1주기) 내 미반응이면 Scheduler가 강제 전이 + lock 회수.</li>
+    <li><b>후속 작업</b>: CANCELED job에 의존하는 후속 job은 Scheduler가 SKIPPED 처리(필수 여부 무관 — 인스턴스 진행 불가).</li>
+    <li><b>콘텐츠 삭제 시</b>: 해당 콘텐츠의 비종결 job 전체 일괄 CANCELED + 인스턴스 CANCELED (System, 단일 트랜잭션).</li>
+    <li>CANCELED는 종결 — <b>재개는 새 workflow_instance(또는 새 job) 생성</b>으로만.</li>
+  </ul>
+
+  <h2>12. SKIPPED 정책</h2>
+  <table>
+    <tr><th style="width: 250px;">발생 상황</th><th style="width: 120px;">의미 분류</th><th>후속 영향</th></tr>
+    <tr><td>media_type 불일치 (영상 콘텐츠의 IMAGE_TC 등)</td><td class="ok">정상 생략</td><td>의존 판정에서 SUCCESS와 동일 취급</td></tr>
+    <tr><td>TEXT_EXTRACT로 충분 → OCR 불필요</td><td class="ok">정상 생략</td><td>동일</td></tr>
+    <tr><td>페이지 수 상한 초과분 미변환</td><td class="ok">정상 생략(부분)</td><td>SUCCESS + 경고 로그 (job 자체는 SUCCESS)</td></tr>
+    <tr><td>선택 작업 실행 조건 미충족</td><td class="ok">정상 생략</td><td>동일</td></tr>
+    <tr><td>선행 필수 작업 최종 실패로 인한 생략</td><td class="no">실패 전파</td><td>인스턴스 FAILED 경로 — PUBLISH 불가</td></tr>
+    <tr><td>CANCELED 선행에 의한 생략</td><td class="no">취소 전파</td><td>인스턴스 CANCELED 경로</td></tr>
+  </table>
+  <p>구현: history의 <code>note</code>에 skip 사유 코드(<code>SKIP_MEDIA_TYPE</code> / <code>SKIP_CONDITION</code> / <code>SKIP_UPSTREAM_FAILED</code> / <code>SKIP_UPSTREAM_CANCELED</code>)를 기록하여 "성공 취급 생략"과 "실패 전파 생략"을 구분한다. 의존 충족 판정 쿼리는 <code>NOT IN ('SUCCESS','SKIPPED')</code>를 유지하되, PUBLISH 판정은 필수 job의 upstream-failed SKIPPED를 차단 사유로 본다.</p>
+
+  <h2>13. Worker 상태 기계</h2>
+  <table>
+    <tr><th style="width: 210px;">전이</th><th style="width: 130px;">주체</th><th>조건</th></tr>
+    <tr><td>OFFLINE → ONLINE</td><td>Worker</td><td>부팅·등록·heartbeat 재개</td></tr>
+    <tr><td>ONLINE → BUSY</td><td>Worker</td><td>Claim 성공 (동시 실행 슬롯 가득)</td></tr>
+    <tr><td>BUSY → ONLINE</td><td>Worker</td><td>job 완료·슬롯 반환</td></tr>
+    <tr><td>ONLINE/BUSY → OFFLINE</td><td>System (Scheduler)</td><td>heartbeat 90초(3주기) 미수신 — 보유 lock 전부 회수</td></tr>
+    <tr><td>ONLINE → DISABLED</td><td>Admin</td><td>즉시 신규 Claim 금지</td></tr>
+    <tr><td>BUSY → DISABLED</td><td>Admin</td><td><b>drain 방식 권장</b>: DISABLED 마킹 → 신규 Claim 금지 → 진행 중 job 완료 후 유휴 (별도 DISABLED_PENDING 상태 대신 <code>status=DISABLED + current_job_id IS NOT NULL</code>로 표현)</td></tr>
+    <tr><td>ONLINE/BUSY → ERROR</td><td>Worker / System</td><td>연속 실패 임계(동일 job_type 3연속) 또는 자체 헬스 실패</td></tr>
+    <tr><td>ERROR → ONLINE</td><td>Admin</td><td>운영자 확인 후 해제 — 자동 복귀 금지</td></tr>
+    <tr><td>DISABLED → ONLINE</td><td>Admin</td><td>재활성화</td></tr>
+  </table>
+  <p class="muted">heartbeat 30초 주기. DISABLED/ERROR 상태에서는 Claim 쿼리 자체를 실행하지 않는다(Worker 루프에서 자체 상태 확인).</p>
+
+  <h2>14. search_index_states.status 상태 기계</h2>
+  <table>
+    <tr><th style="width: 210px;">전이</th><th style="width: 130px;">주체</th><th>조건</th></tr>
+    <tr><td>PENDING → INDEXED</td><td>INDEX Worker</td><td>최초 색인 성공</td></tr>
+    <tr><td>PENDING → FAILED</td><td>INDEX Worker</td><td>색인 최종 실패</td></tr>
+    <tr><td>INDEXED → STALE</td><td>CMS Web / System</td><td>메타데이터 수정, OCR·STT 등 선택 작업 완료, rendition 교체</td></tr>
+    <tr><td>STALE → INDEXED</td><td>INDEX Worker</td><td>재색인 성공 (index_version 증가)</td></tr>
+    <tr><td>STALE → FAILED</td><td>INDEX Worker</td><td>재색인 최종 실패</td></tr>
+    <tr><td>FAILED → STALE</td><td>Admin / System</td><td>재시도 예약 (수동 또는 배치)</td></tr>
+    <tr><td>FAILED → INDEXED</td><td>INDEX Worker</td><td>직접 재색인 성공</td></tr>
+  </table>
+  <p><b>STALE 전환 정책</b>: 색인 대상 필드(제목·설명·태그) 수정 시 즉시 STALE. 선택 작업(OCR/STT/AI) SUCCESS 시 STALE. STALE 감지는 Scheduler 틱에서 재색인 INDEX job 생성(또는 기존 인스턴스와 무관한 단독 job)으로 처리한다.</p>
+
+  <h2>15. 상태 전이 이력 기록 정책</h2>
+  <ul>
+    <li><b>모든 상태 전이는 history 기록 필수</b> — 전이 UPDATE와 history INSERT는 <b>같은 트랜잭션</b>. 하나라도 실패하면 둘 다 롤백.</li>
+    <li>기록 항목: <code>from_status</code>(생성 시 NULL), <code>to_status</code>, <code>actor</code>(<code>scheduler</code> / <code>worker:{id}</code> / <code>admin:{user_id}</code> / <code>system</code>), <code>note</code>(사유 코드+메시지), <code>created_at</code>.</li>
+    <li>append-only — UPDATE/DELETE 금지 (테이블 권한에서 애플리케이션 계정에 INSERT/SELECT만 부여).</li>
+    <li>관리자 화면 타임라인: job 상세에서 <code>created_at</code> 순 세로 타임라인으로 표시 — 상태 뱃지, actor, note, 구간 소요 시간(다음 전이와의 차).</li>
+  </ul>
+
+  <h2>16. Laravel 구현 기준</h2>
+  <pre>// 상태 전이표는 PHP enum + 상수 맵으로 관리 (config 파일보다 타입 안전)
+enum JobStatus: string {
+  case Waiting='WAITING'; case Ready='READY'; case Running='RUNNING';
+  case Success='SUCCESS'; case Failed='FAILED'; case Retry='RETRY';
+  case Skipped='SKIPPED'; case Canceled='CANCELED'; case Timeout='TIMEOUT';
+}
+
+class JobStateMachine {
+  private const TRANSITIONS = [
+    'WAITING' =&gt; ['READY','SKIPPED','CANCELED'],
+    'READY'   =&gt; ['RUNNING','SKIPPED','CANCELED'],
+    'RUNNING' =&gt; ['SUCCESS','FAILED','RETRY','TIMEOUT','CANCELED'],
+    'TIMEOUT' =&gt; ['RETRY','FAILED','CANCELED'],
+    'RETRY'   =&gt; ['READY','FAILED','CANCELED'],
+    'FAILED'  =&gt; ['RETRY'],
+    // SUCCESS / SKIPPED / CANCELED : 종결 — 빈 배열
+  ];
+
+  public function canTransition(JobStatus $from, JobStatus $to): bool { … }
+
+  // 주의: transition()은 자체 트랜잭션을 열지 않는다 —
+  // 호출부(CommandService/Claim/Scheduler)가 소유한 트랜잭션 안에서 실행된다.
+  public function transition(int $jobId, JobStatus $from, JobStatus $to,
+                             string $actor, ?string $note = null): bool {
+    // assert: DB::transactionLevel() > 0
+    $this-&gt;assertAllowed($from, $to);
+    $updated = DB::update(
+      "UPDATE workflow_jobs SET status=?, updated_at=now()
+       WHERE id=? AND status=?", [$to-&gt;value, $jobId, $from-&gt;value]); // CAS
+    if ($updated === 0) return false;   // 동시성 충돌 — 호출부가 재조회 후 판단
+    DB::insert("INSERT INTO workflow_job_histories …", [...]);        // 같은 트랜잭션
+    return true;
+  }
+}</pre>
+  <ul>
+    <li><b>트랜잭션 소유권</b>: 최상위 <code>DB::transaction()</code>은 CommandService(관리자 조작)·JobClaimService(Worker)·Scheduler가 소유한다. StateMachine은 현재 트랜잭션 안에서 CAS UPDATE + history INSERT만 수행하며 내부에서 트랜잭션을 열지 않는다. 단독 전이가 필요한 경로는 별도 wrapper(<code>TransitionRunner</code>)가 트랜잭션을 연다.</li>
+    <li>동일 패턴으로 <code>ContentStateMachine</code>, <code>InstanceStateMachine</code>, <code>WorkerStateMachine</code>, <code>SearchIndexStateMachine</code> 구성 — 공통 추상 클래스 <code>AbstractStateMachine</code>에 transition/canTransition/이력 기록을 두고 전이표만 각자 정의.</li>
+    <li><b>모든 상태 변경은 StateMachine 서비스 경유</b> — Eloquent <code>$model-&gt;update(['status'=&gt;…])</code> 직접 호출 금지 (정적 분석 규칙 또는 Model observer로 차단).</li>
+    <li>CAS(<code>WHERE status=?</code>) 0행 갱신 = 동시성 충돌: 예외가 아닌 정상 분기 — 재조회 후 이미 목표 상태면 멱등 성공, 다른 상태면 포기.</li>
+    <li>Worker 완료 기록은 CAS에 <code>worker_id=:me</code> 추가(lease fencing).</li>
+    <li>DB trigger는 <b>2차 방어선으로 권장</b>(§17) — 애플리케이션 우회(수동 SQL, 마이그레이션 스크립트) 실수를 차단.</li>
+  </ul>
+
+  <h2>17. PostgreSQL Trigger / Constraint 제안</h2>
+  <p>CHECK 제약은 상태값 목록만 검증 가능 — 전이 검증은 BEFORE UPDATE trigger + 허용 전이 테이블로 구현한다.</p>
+  <pre>CREATE TABLE workflow_job_allowed_transitions (
+  from_status varchar(20) NOT NULL,
+  to_status   varchar(20) NOT NULL,
+  PRIMARY KEY (from_status, to_status)
+);
+-- §5 전이표를 시드 데이터로 INSERT
+
+CREATE OR REPLACE FUNCTION check_job_transition() RETURNS trigger AS $$
+BEGIN
+  IF OLD.status = NEW.status THEN RETURN NEW; END IF;  -- 상태 외 컬럼 갱신 통과
+  IF NOT EXISTS (SELECT 1 FROM workflow_job_allowed_transitions
+                 WHERE from_status = OLD.status AND to_status = NEW.status) THEN
+    RAISE EXCEPTION 'invalid job transition: % -&gt; % (job %)',
+      OLD.status, NEW.status, OLD.id;
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_job_transition BEFORE UPDATE OF status ON workflow_jobs
+FOR EACH ROW EXECUTE FUNCTION check_job_transition();</pre>
+  <ul>
+    <li><code>updated_at</code> 자동 갱신은 위 트리거(또는 공용 <code>set_updated_at</code> 트리거)로 처리.</li>
+    <li>history 누락 방지 트리거(AFTER UPDATE에서 history 자동 INSERT)는 <b>비권장</b> — actor/note를 트리거가 알 수 없어 이력 품질이 떨어진다. history는 애플리케이션 책임으로 유지하고, 정합성은 야간 감사 쿼리(전이 수 vs history 수 대조)로 검증.</li>
+    <li><b>판단</b>: 애플리케이션(StateMachine) 중심 + DB trigger는 얇은 2차 방어선. 전이표 변경 시 enum과 시드를 함께 배포(불일치 시 trigger가 먼저 막아 안전).</li>
+    <li>DELETED 콘텐츠 job 생성 금지: <code>workflow_jobs</code> BEFORE INSERT trigger에서 contents.status IN ('DELETED') 검사 → EXCEPTION.</li>
+  </ul>
+
+  <h2>18. 관리자 수동 조작 정책</h2>
+  <table>
+    <tr><th style="width: 165px;">액션</th><th style="width: 260px;">발생 전이</th><th>부수 효과</th></tr>
+    <tr><td>실패 Job 재시도</td><td>jobs FAILED → RETRY</td><td>retry_count=0, history(actor=admin), 이력·로그 보존</td></tr>
+    <tr><td>READY Job 취소</td><td>jobs READY → CANCELED</td><td>후속 job SKIPPED 전파</td></tr>
+    <tr><td>RUNNING Job 취소</td><td>jobs RUNNING → CANCELED</td><td>cancel 신호 → Worker 중단 → lock 해제 (§11)</td></tr>
+    <tr><td>Lock 강제 회수</td><td>jobs RUNNING → RETRY (또는 FAILED)</td><td>lock DELETE, fencing으로 늦은 결과 폐기</td></tr>
+    <tr><td>콘텐츠 재처리</td><td>contents READY → PROCESSING</td><td>새 instance + jobs 생성 (기존 rendition 유지)</td></tr>
+    <tr><td>FAILED 해제 후 재처리</td><td>contents FAILED → PROCESSING</td><td>새 instance 생성, 실패 인스턴스는 FAILED로 보존</td></tr>
+    <tr><td>Worker 비활성화</td><td>agents ONLINE/BUSY → DISABLED</td><td>신규 Claim 금지, 진행 중 job은 drain</td></tr>
+    <tr><td>Worker ERROR 해제</td><td>agents ERROR → ONLINE</td><td>운영자 확인 기록 (note 필수)</td></tr>
+  </table>
+  <p class="muted">모든 수동 조작은 감사 로그 필수 — history의 actor=admin:{user_id} + note에 사유 입력을 강제한다(관리자 UI에서 사유 입력란 필수).</p>
+
+  <h2>19. 장애 시나리오별 상태 변화</h2>
+  <table>
+    <tr><th style="width: 175px;">시나리오</th><th>상태 전이 및 후속 처리</th><th style="width: 150px;">로그 기록</th></tr>
+    <tr><td>1. Worker가 TC 실행 중 사망</td><td>heartbeat 90초 미수신 → agents=OFFLINE(System) → lock 만료·회수 → TC RUNNING→RETRY(+백오프) → 다른 Worker가 재실행</td><td>history: actor=system, note=lease_expired · logs: WARN</td></tr>
+    <tr><td>2. Storage I/O 오류</td><td>해당 job RUNNING→RETRY(일시적 분류). 동일 오류 반복 시 운영 알림 — 전역 장애 가능성</td><td>logs: ERROR + storage 오류 코드</td></tr>
+    <tr><td>3. VERIFY 손상 파일 감지</td><td>VERIFY RUNNING→FAILED(영구, 재시도 없음) → 후속 필수 job SKIPPED(실패 전파) → instance·contents FAILED → 사용자 안내</td><td>history: note=PERMANENT_CORRUPT · logs: 검증 상세</td></tr>
+    <tr><td>4. INDEX 검색엔진 장애</td><td>INDEX RUNNING→RETRY (base 30초 백오프, max 5회) → 소진 시 FAILED → contents FAILED(INDEX는 필수) + 알림. search_index_states=FAILED</td><td>logs: 엔진 응답 코드</td></tr>
+    <tr><td>5. OCR 실패 (선택)</td><td>OCR FAILED — PUBLISH 비차단, contents READY 진행. 대시보드 경고</td><td>logs: 엔진 오류</td></tr>
+    <tr><td>6. PUBLISH 직전 thumbnail 누락</td><td>PUBLISH 판정 실패(rendition 실재 검사) → PUBLISH FAILED(재시도 안 함, 원인=필수 산출물 누락) → 관리자 알림 → CA 수동 재실행 → PUBLISH 수동 재시도</td><td>history: note=MISSING_RENDITION:THUMBNAIL</td></tr>
+    <tr><td>7. 관리자가 RUNNING Job 취소</td><td>cancel 신호 → Worker 중단·정리 → RUNNING→CANCELED → 후속 SKIPPED → instance CANCELED(필수 경로였다면)</td><td>history: actor=admin, note=사유</td></tr>
+    <tr><td>8. 콘텐츠 삭제 중 Job 실행 중</td><td>contents→DELETED(단일 트랜잭션에서 비종결 job 일괄 CANCELED + cancel 신호) → Worker 중단 → 신규 job 생성은 INSERT 가드가 차단</td><td>history: actor=system, note=content_deleted</td></tr>
+    <tr><td>9. Scheduler 중복 실행</td><td>두 번째 인스턴스는 pg advisory lock 획득 실패 → 대기/종료. 상태 변화 없음</td><td>Scheduler 프로세스 로그만</td></tr>
+    <tr><td>10. Worker가 늦은 SUCCESS 결과 전송</td><td>이미 회수되어 다른 Worker가 RUNNING — 늦은 UPDATE는 CAS(<code>worker_id=:me</code>) 0행 → 결과 폐기, rendition upsert도 시도 전 lease 검사로 차단</td><td>logs: WARN fenced_result_discarded</td></tr>
+  </table>
+
+  <h2>20. 운영 시 고려사항</h2>
+  <ul>
+    <li>전이표 변경은 3곳 동시 배포: PHP 상수 맵, <code>workflow_job_allowed_transitions</code> 시드, 본 문서. 불일치 시 trigger가 먼저 차단하므로 안전하지만 배포 순서는 시드 → 코드.</li>
+    <li>야간 감사 배치: history 없는 상태 변경 탐지(updated_at vs 최신 history), RUNNING인데 lock 없는 job, lock 있는데 RUNNING 아닌 job — 각각 알림.</li>
+    <li>준종결 FAILED가 장기 방치되지 않도록 실패 후 N일 경과 콘텐츠 리포트를 주간 발송.</li>
+    <li>상태 기계 단위 테스트: 허용 전이 전수 + 금지 전이 전수 + CAS 충돌 시나리오를 CI에 포함.</li>
+  </ul>
+
+  <h2>21. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>관리자 화면 와이어프레임</b> — job 타임라인·큐 대시보드·수동 조작 UI (Frame CMS 디자인 시스템 기반)</li>
+    <li><b>Laravel 마이그레이션 + 시드 초안</b> — 전이표 테이블·trigger 포함</li>
+    <li><b>API 명세서</b> — 수동 조작 액션별 엔드포인트·권한·감사 로그</li>
+    <li><b>장애 대응 Runbook</b> — §19 시나리오별 운영 절차서 확장</li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

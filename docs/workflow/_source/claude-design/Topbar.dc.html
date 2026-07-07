@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-app: oklch(0.982 0.002 265); --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265); --bg-hover: oklch(0.952 0.004 265);
+    --border: oklch(0.918 0.004 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-hover: oklch(0.46 0.095 264); --accent-fg: oklch(0.99 0 0); --accent-subtle: oklch(0.955 0.022 264);
+    --danger: oklch(0.57 0.16 25);
+    --shadow-sm: 0 1px 2px oklch(0.2 0.02 265 / 0.06);
+  }
+  html[data-theme="dark"] {
+    --bg-app: oklch(0.162 0.004 265); --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265); --bg-hover: oklch(0.278 0.008 265);
+    --border: oklch(0.29 0.007 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-hover: oklch(0.74 0.11 264); --accent-fg: oklch(0.16 0.02 264); --accent-subtle: oklch(0.3 0.045 264);
+    --danger: oklch(0.66 0.17 25);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+  }
+  * { box-sizing: border-box; }
+  [data-tb] ::placeholder { color: var(--text-3); }
+</style>
+</helmet>
+<header data-tb style="height: 60px; flex-shrink: 0; background: color-mix(in oklab, var(--bg-app) 82%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px; padding: 0 22px; font-family: 'IBM Plex Sans KR', sans-serif;">
+  <sc-if value="{{ showToggle }}"><button onClick="{{ onToggleCollapse }}" title="사이드바" style="width: 34px; height: 34px; border-radius: 8px; border: none; background: transparent; color: var(--text-2); cursor: pointer; display: grid; place-items: center; flex-shrink: 0;" style-hover="background: var(--bg-subtle);"><ds-icon glyph="panelLeft" size="18"></ds-icon></button></sc-if>
+  <div style="min-width: 0; flex-shrink: 1;">{{ leading }}</div>
+  <div style="flex: 1;"></div>
+  <sc-if value="{{ showSearch }}">
+    <div style="position: relative; width: 260px; max-width: 34vw;">
+      <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; display: flex;"><ds-icon glyph="search" size="16"></ds-icon></span>
+      <input placeholder="{{ searchPlaceholder }}" style="width: 100%; height: 38px; padding: 0 12px 0 38px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-1); font-size: 13.5px; font-family: inherit; outline: none;" style-focus="border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle);">
+    </div>
+  </sc-if>
+  <button onClick="{{ onToggleTheme }}" title="테마" style="width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-2); cursor: pointer; display: grid; place-items: center; flex-shrink: 0;" style-hover="background: var(--bg-hover); color: var(--text-1);"><ds-icon glyph="{{ themeGlyph }}" size="18"></ds-icon></button>
+  <button title="알림" style="position: relative; width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-2); cursor: pointer; display: grid; place-items: center; flex-shrink: 0;" style-hover="background: var(--bg-hover); color: var(--text-1);"><ds-icon glyph="bell" size="18"></ds-icon><sc-if value="{{ hasNotif }}"><span style="position: absolute; top: 9px; right: 9px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); border: 1.5px solid var(--bg-surface);"></span></sc-if></button>
+  <sc-if value="{{ showAction }}"><button onClick="{{ onAction }}" style="height: 38px; padding: 0 15px; border-radius: 9px; border: none; background: var(--accent); color: var(--accent-fg); font-size: 13.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 7px; flex-shrink: 0; font-family: inherit; box-shadow: var(--shadow-sm);" style-hover="background: var(--accent-hover);"><ds-icon glyph="{{ actionGlyph }}" size="17"></ds-icon>{{ actionLabel }}</button></sc-if>
+</header>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 900, &quot;height&quot;: 60}, &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;default&quot;: &quot;light&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;showToggle&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;showSearch&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;searchPlaceholder&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;에셋, 태그, 컬렉션 검색…&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;showAction&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;actionLabel&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;업로드&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;actionGlyph&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;upload&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;hasNotif&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;leading&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;ReactNode&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    return {
+      showToggle: p.showToggle !== false && p.showToggle !== 'false',
+      leading: p.leading,
+      showSearch: p.showSearch !== false && p.showSearch !== 'false',
+      searchPlaceholder: p.searchPlaceholder ?? '검색…',
+      themeGlyph: p.theme === 'dark' ? 'sun' : 'moon',
+      hasNotif: p.hasNotif !== false && p.hasNotif !== 'false',
+      showAction: p.showAction !== false && p.showAction !== 'false',
+      actionGlyph: p.actionGlyph ?? 'upload',
+      actionLabel: p.actionLabel ?? '업로드',
+      onToggleCollapse: p.onToggleCollapse || (() => {}),
+      onToggleTheme: p.onToggleTheme || (() => {}),
+      onAction: p.onAction || (() => {}),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<span style="{{ rootStyle }}" title="{{ name }}">{{ initial }}</span>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 120, &quot;height&quot;: 80}, &quot;name&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;김서연&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;size&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;xs&quot;, &quot;sm&quot;, &quot;md&quot;, &quot;lg&quot;, &quot;xl&quot;], &quot;default&quot;: &quot;md&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;hue&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: null, &quot;min&quot;: 0, &quot;max&quot;: 360, &quot;tsType&quot;: &quot;number&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const name = p.name ?? '사용자';
+    const size = p.size ?? 'md';
+    const sizes = { xs: [22, 10], sm: [26, 11], md: [34, 13], lg: [44, 16], xl: [64, 24] };
+    const [dim, fs] = sizes[size] || sizes.md;
+
+    let hue = p.hue;
+    if (hue == null) {
+      let h = 0;
+      for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+      hue = h;
+    }
+    const initial = (name || '?').trim().slice(0, 1);
+    return {
+      name, initial,
+      rootStyle: `display: inline-grid; place-items: center; width: ${dim}px; height: ${dim}px; border-radius: 50%; font-family: 'IBM Plex Sans KR', sans-serif; font-size: ${fs}px; font-weight: 700; flex-shrink: 0; background: oklch(0.93 0.035 ${hue}); color: oklch(0.42 0.09 ${hue});`,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265);
+    --border: oklch(0.918 0.004 265); --border-strong: oklch(0.85 0.006 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+    --shadow-lg: 0 16px 48px oklch(0.2 0.02 265 / 0.18);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265);
+    --border: oklch(0.29 0.007 265); --border-strong: oklch(0.38 0.01 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+    --shadow-lg: 0 16px 48px oklch(0 0 0 / 0.6);
+  }
+  * { box-sizing: border-box; }
+  @keyframes ddPop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+</style>
+</helmet>
+<div style="font-family: 'IBM Plex Sans KR', sans-serif;">
+  <sc-if value="{{ showLabel }}"><span style="display: block; font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 8px;">{{ label }}<sc-if value="{{ required }}"><span style="color: var(--danger-fg);"> *</span></sc-if></span></sc-if>
+  <div style="position: relative;">
+    <div onClick="{{ onToggle }}" style="display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 12px 0 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); cursor: pointer; transition: border-color .13s;" style-hover="border-color: var(--border-strong);">
+      <sc-if value="{{ triggerAvatar }}"><span style="{{ triggerAvatar.style }}">{{ triggerAvatar.initial }}</span></sc-if>
+      <span style="flex: 1; min-width: 0; font-size: 14px; color: {{ displayColor }}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ displayText }}</span>
+      <span style="{{ chevStyle }}"><ds-icon glyph="chevronDown" size="16"></ds-icon></span>
+    </div>
+    <sc-if value="{{ open }}">
+      <div onClick="{{ onClose }}" style="position: fixed; inset: 0; z-index: 29;"></div>
+      <div style="position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 30; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 6px; max-height: 240px; overflow-y: auto; animation: ddPop .14s ease;">
+        <sc-for list="{{ options }}" as="o" hint-placeholder-count="4">
+          <button onClick="{{ o.onSelect }}" style="{{ o.rowStyle }}" style-hover="background: var(--bg-subtle);">
+            <sc-if value="{{ o.avatar }}"><span style="{{ o.avatar.style }}">{{ o.avatar.initial }}</span></sc-if>
+            <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ o.label }}</span>
+            <sc-if value="{{ o.selected }}"><span style="color: var(--accent-text); display: flex;"><ds-icon glyph="check" size="15"></ds-icon></span></sc-if>
+          </button>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 300, &quot;height&quot;: 200}, &quot;label&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;카테고리&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;value&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;placeholder&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;선택하세요&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;options&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;string[]&quot;}, &quot;withAvatars&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;required&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { open: false, val: null };
+  hue(name) { let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360; return h; }
+  avatarStyle(name, dim) { const h = this.hue(name); return `display: inline-grid; place-items: center; width: ${dim}px; height: ${dim}px; border-radius: 50%; font-size: 10px; font-weight: 700; flex-shrink: 0; background: oklch(0.93 0.035 ${h}); color: oklch(0.42 0.09 ${h});`; }
+  norm(opts) { return (opts || []).map(o => (typeof o === 'string' ? { value: o, label: o } : o)); }
+  renderVals() {
+    const p = this.props;
+    const label = p.label ?? '';
+    const withAvatars = p.withAvatars === true || p.withAvatars === 'true';
+    const placeholder = p.placeholder ?? '선택하세요';
+    const options = this.norm(p.options);
+    const controlled = p.value !== undefined && !!p.onChange;
+    const val = controlled ? (p.value ?? null) : (this.state.val == null ? (p.value ?? null) : this.state.val);
+    const selected = options.find(o => o.value === val);
+
+    return {
+      label, required: p.required === true || p.required === 'true',
+      showLabel: !!label,
+      open: this.state.open,
+      displayText: selected ? selected.label : placeholder,
+      displayColor: selected ? 'var(--text-1)' : 'var(--text-3)',
+      triggerAvatar: (withAvatars && selected) ? { initial: selected.label.slice(0, 1), style: this.avatarStyle(selected.label, 24) } : null,
+      chevStyle: `display: flex; flex-shrink: 0; color: var(--text-3); transition: transform .15s; transform: rotate(${this.state.open ? '180deg' : '0deg'});`,
+      options: options.map(o => ({
+        label: o.label,
+        selected: o.value === val,
+        avatar: withAvatars ? { initial: o.label.slice(0, 1), style: this.avatarStyle(o.label, 24) } : null,
+        rowStyle: `display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 8px 10px; border: none; border-radius: 7px; cursor: pointer; font-size: 13.5px; text-align: left; background: ${o.value === val ? 'var(--accent-subtle)' : 'transparent'}; color: ${o.value === val ? 'var(--accent-text)' : 'var(--text-1)'}; font-weight: ${o.value === val ? '600' : '500'};`,
+        onSelect: () => { this.setState({ val: o.value, open: false }); if (p.onChange) p.onChange(o.value); },
+      })),
+      onToggle: () => this.setState(s => ({ open: !s.open })),
+      onClose: () => this.setState({ open: false }),
+    };
+  }
+}
+</script>
+</body>
+</html>

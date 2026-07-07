@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; }
+  doc-page .muted { color: #6b7080; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Workflow Admin OpenAPI Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Workflow Admin OpenAPI Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">워크플로우 관리자 OpenAPI 명세서 — OpenAPI 3.1 계약 문서 작성 기준</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: Admin API Spec · Controller &amp; Service Spec (각 v1.0)</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>Admin API Spec v1.0을 <b>기계 판독 가능한 OpenAPI 3.1 계약</b>으로 정리하는 기준을 제공한다. 프론트엔드는 Swagger UI·Mock 서버로 연동하고, 백엔드는 Controller/FormRequest/Resource 구현 기준으로, QA는 테스트 케이스 원천으로 사용한다. 에러 응답·권한·상태 충돌(409) 응답을 스키마로 표준화한다. 본 문서의 YAML 발췌를 조합하면 <code>openapi.yaml</code> 전체를 구성할 수 있다.</p>
+
+  <h2>2. OpenAPI 기본 정보</h2>
+  <pre>openapi: 3.1.0
+info:
+  title: Frame CMS/MAM Workflow Admin API
+  version: 1.0.0
+  description: >
+    관리자 전용 워크플로우 운영 API. 모든 조작은 상태 기계 검증과
+    감사 로그를 전제로 한다. 시각은 UTC ISO 8601.
+servers:
+  - url: /admin/workflows
+security:
+  - bearerAuth: []
+  - adminSession: []</pre>
+  <p>공통 응답 envelope: 성공 <code>{success, data, meta?}</code> / 실패 <code>{success:false, error}</code>. Content-Type은 <code>application/json</code> 고정.</p>
+
+  <h2>3. Security Scheme</h2>
+  <pre>components:
+  securitySchemes:
+    bearerAuth:            # Sanctum 토큰
+      type: http
+      scheme: bearer
+      bearerFormat: sanctum
+    adminSession:          # 관리자 웹 세션 (SPA 동일 출처)
+      type: apiKey
+      in: cookie
+      name: frame_admin_session</pre>
+
+  <h2>4. 공통 Schema</h2>
+  <pre>SuccessResponse:
+  type: object
+  required: [success, data]
+  properties:
+    success: { type: boolean, const: true }
+    data: {}                       # path별 스키마가 오버라이드
+    meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+ErrorResponse:
+  type: object
+  required: [success, error]
+  properties:
+    success: { type: boolean, const: false }
+    error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+        current_state: { type: string }
+        allowed_actions: { type: array, items: { type: string } }
+
+PaginationMeta:
+  type: object
+  properties:
+    page: { type: integer, minimum: 1 }
+    per_page: { type: integer, maximum: 200 }
+    total: { type: integer }
+    last_page: { type: integer }
+
+UserSummary:   { type: object, properties: { id: {type: integer}, name: {type: string} } }
+ContentSummary:{ type: object, properties: { content_id: {type: integer},
+                 title: {type: string}, status: { $ref: '#/components/schemas/ContentStatus' } } }
+WorkerSummary: { type: object, properties: { id: {type: integer}, name: {type: string},
+                 type: { $ref: '#/components/schemas/WorkerType' }, status: { $ref: '#/components/schemas/WorkerStatus' } } }
+JobSummary:    { type: object, properties: { job_id: {type: integer},
+                 job_type: { $ref: '#/components/schemas/JobType' }, status: { $ref: '#/components/schemas/JobStatus' } } }
+ProgressSummary: { type: object, properties: { percent: {type: number}, message: {type: string},
+                 estimated_remaining_sec: {type: integer, nullable: true},
+                 updated_at: {type: string, format: date-time} } }
+LockSummary:   { type: object, properties: { locked_by_worker_id: {type: integer},
+                 locked_at: {type: string, format: date-time},
+                 locked_until: {type: string, format: date-time},
+                 heartbeat_at: {type: string, format: date-time} } }</pre>
+
+  <h2>5. Enum Schema</h2>
+  <pre>ContentStatus: { type: string, enum: [UPLOADING, REGISTERED, PROCESSING, READY, FAILED, ARCHIVED, DELETED] }
+WorkflowInstanceStatus: { type: string, enum: [RUNNING, SUCCESS, FAILED, CANCELED] }
+JobStatus: { type: string, enum: [WAITING, READY, RUNNING, SUCCESS, FAILED, RETRY, SKIPPED, CANCELED, TIMEOUT] }
+WorkerStatus: { type: string, enum: [ONLINE, OFFLINE, BUSY, DISABLED, ERROR] }
+SearchIndexStatus: { type: string, enum: [PENDING, INDEXED, STALE, FAILED] }
+MediaType: { type: string, enum: [VIDEO, IMAGE, AUDIO, DOC] }
+JobType: { type: string, enum: [TM, VERIFY, MA, TC, IMAGE_TC, AUDIO_TC, CA, DOC_PREVIEW,
+           OCR, TEXT_EXTRACT, INDEX, PUBLISH, CLEANUP, WAVEFORM, STT, AI_ANALYSIS] }
+RenditionType: { type: string, enum: [MASTER, PROXY_VIDEO, PROXY_IMAGE, PROXY_AUDIO, THUMBNAIL,
+                CATALOG, PAGE_PREVIEW, DOCUMENT_PREVIEW, WAVEFORM, OCR_TEXT, EXTRACTED_TEXT] }
+StorageZone: { type: string, enum: [TEMP, MASTER, PROXY, THUMBNAIL, CATALOG, DOCUMENT, ARCHIVE] }
+AlertSeverity: { type: string, enum: [HIGH, MED, LOW] }
+FailureImpact: { type: string, enum: [REQUIRED_BLOCKING, OPTIONAL_WARNING] }
+WorkerType: { type: string, enum: [TM, GENERAL, TRANSCODE, IMAGE, AUDIO, DOCUMENT, OCR, INDEX] }</pre>
+
+  <h2>6. Dashboard API</h2>
+  <pre>/dashboard:
+  get:
+    summary: 워크플로우 대시보드 집계
+    x-permission: workflow.view
+    parameters:
+      - { name: range, in: query, schema: { type: string, enum: [1h, 24h, 7d], default: 24h } }
+      - { name: media_type, in: query, schema: { $ref: '#/components/schemas/MediaType' } }
+      - { name: refresh, in: query, schema: { type: boolean, default: false } }
+    responses:
+      '200':
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/SuccessResponse'
+                - properties: { data: { $ref: '#/components/schemas/DashboardData' } }
+      '403': { $ref: '#/components/responses/Forbidden' }</pre>
+
+  <h2>7. Content APIs</h2>
+  <table>
+    <tr><th style="width: 230px;">Path</th><th style="width: 130px;">x-permission</th><th>응답</th></tr>
+    <tr><td>GET /contents</td><td>workflow.view</td><td>200 목록 + meta</td></tr>
+    <tr><td>GET /contents/{id}</td><td>workflow.view</td><td>200 상세 / 404</td></tr>
+    <tr><td>POST /contents/{id}/reprocess</td><td>workflow.reprocess</td><td>201 / 404 / 409(CONTENT_DELETED·INVALID_STATE_TRANSITION) / 422</td></tr>
+    <tr><td>POST /contents/{id}/cancel</td><td>workflow.cancel</td><td>200 / 404 / 409(CONTENT_NOT_PROCESSING) / 422</td></tr>
+  </table>
+  <pre>/contents/{id}/reprocess:
+  post:
+    summary: 콘텐츠 재처리 (새 workflow_instance 생성)
+    x-permission: workflow.reprocess
+    parameters: [ { name: id, in: path, required: true, schema: { type: integer } } ]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ReprocessContentRequest' }
+    responses:
+      '201':
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/SuccessResponse'
+                - properties: { data: { $ref: '#/components/schemas/CommandResult' } }
+      '404': { $ref: '#/components/responses/NotFound' }
+      '409': { $ref: '#/components/responses/StateConflict' }
+      '422': { $ref: '#/components/responses/ValidationError' }</pre>
+
+  <h2>8. Job APIs</h2>
+  <table>
+    <tr><th style="width: 230px;">Path</th><th style="width: 140px;">x-permission</th><th>주요 409 케이스</th></tr>
+    <tr><td>GET /jobs · GET /jobs/{id}</td><td>view / logs.view</td><td>—</td></tr>
+    <tr><td>POST /jobs/{id}/retry</td><td>workflow.retry</td><td>SUCCESS/SKIPPED/CANCELED 재시도 → INVALID_STATE_TRANSITION · RUNNING → JOB_ALREADY_RUNNING</td></tr>
+    <tr><td>POST /jobs/retry-batch</td><td>workflow.retry</td><td>부분 성공 — 건별 결과 배열 (BatchCommandResult)</td></tr>
+    <tr><td>POST /jobs/{id}/cancel</td><td>workflow.cancel</td><td>종결 상태 취소 → INVALID_STATE_TRANSITION · RUNNING은 202(cancel_requested)</td></tr>
+    <tr><td>POST /jobs/{id}/release-lock</td><td>workflow.release_lock</td><td>RUNNING 아님 → JOB_NOT_RUNNING · lock 없음 → JOB_LOCK_NOT_FOUND</td></tr>
+    <tr><td>PATCH /jobs/{id}/priority</td><td>workflow.retry</td><td>RUNNING/종결 → INVALID_STATE_TRANSITION · 범위 초과 422</td></tr>
+  </table>
+  <pre>/jobs/{id}/release-lock:
+  post:
+    summary: RUNNING Job의 lease 강제 회수 (HIGH)
+    x-permission: workflow.release_lock
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ReleaseJobLockRequest' }
+    responses:
+      '200': { … CommandResult … }
+      '409':
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ErrorResponse' }
+            examples:
+              lockNotFound:
+                value: { success: false, error: { code: JOB_LOCK_NOT_FOUND,
+                  message: "lock이 존재하지 않습니다. 이미 회수되었거나 완료되었습니다.",
+                  current_state: SUCCESS, allowed_actions: [view_logs] } }
+              notRunning:
+                value: { success: false, error: { code: JOB_NOT_RUNNING,
+                  message: "RUNNING 상태가 아닙니다.", current_state: RETRY } }</pre>
+
+  <h2>9. Worker APIs</h2>
+  <pre>/workers/{id}/enable:
+  post:
+    summary: DISABLED Worker 재활성화
+    x-permission: workflow.worker.manage
+    responses:
+      '200': { … WorkflowWorkerItem … }
+      '409':
+        content:
+          application/json:
+            examples:
+              notDisabled:
+                value: { success: false, error: { code: WORKER_NOT_DISABLED,
+                  message: "DISABLED 상태가 아닙니다.", current_state: ONLINE } }
+              noHeartbeat:
+                value: { success: false, error: { code: WORKER_HEARTBEAT_MISSING,
+                  message: "heartbeat 미수신 — Worker 프로세스 기동을 확인하세요." } }
+# /workers/{id}/clear-error 409: ERROR 아님 → INVALID_STATE_TRANSITION
+# /workers/{id}/disable 409: 이미 DISABLED → INVALID_STATE_TRANSITION</pre>
+
+  <h2>10. Alert APIs</h2>
+  <p><code>GET /alerts</code>(severity·acknowledged·event_type·date 필터) · <code>POST /alerts/{id}/ack</code> — body <code>AckAlertRequest</code>. <b>멱등</b>: 이미 확인된 알림 ack는 409가 아닌 <b>200 + 기존 acknowledged_at</b> 반환 — 문서의 description에 명시하고 예시 2개(최초/재호출)를 포함한다.</p>
+
+  <h2>11. Request Body Schema</h2>
+  <pre>ReprocessContentRequest:
+  type: object
+  required: [mode, reason]
+  properties:
+    mode: { type: string, enum: [failed_from, full] }
+    reason: { type: string, maxLength: 1000 }
+    priority: { type: integer, minimum: 0, maximum: 1000 }
+    keep_existing_renditions: { type: boolean, default: true }
+    requested_job_type: { $ref: '#/components/schemas/JobType' }
+
+RetryJobRequest:
+  type: object
+  properties:
+    reason: { type: string, maxLength: 1000 }
+    reset_retry_count: { type: boolean, default: true }
+    priority: { type: integer, minimum: 0, maximum: 1000 }
+
+RetryJobBatchRequest:
+  type: object
+  required: [job_ids, reason]
+  properties:
+    job_ids: { type: array, items: { type: integer }, minItems: 1, maxItems: 100 }
+    reason: { type: string, maxLength: 1000 }
+
+CancelContentRequest / CancelJobRequest / ClearWorkerErrorRequest:
+  required: [reason]  →  reason: { type: string, maxLength: 1000 }
+
+ReleaseJobLockRequest:
+  required: [reason]
+  properties:
+    reason: { type: string, maxLength: 1000 }
+    target_status: { type: string, enum: [RETRY, FAILED], default: RETRY }
+
+UpdateJobPriorityRequest:
+  required: [priority]
+  properties: { priority: { type: integer, minimum: 0, maximum: 1000 },
+                reason: { type: string, maxLength: 1000 } }
+
+DisableWorkerRequest:
+  required: [reason]
+  properties: { reason: { type: string, maxLength: 1000 },
+                drain: { type: boolean, default: true } }
+
+EnableWorkerRequest: { properties: { reason: { type: string, maxLength: 1000 } } }
+AckAlertRequest:     { properties: { note: { type: string, maxLength: 1000 } } }</pre>
+
+  <h2>12. Response Schema</h2>
+  <pre>DashboardData:
+  type: object
+  properties:
+    contents: { type: object, additionalProperties: { type: integer } }  # 상태별 count
+    jobs:     { type: object, additionalProperties: { type: integer } }
+    workers:  { type: object, additionalProperties: { type: integer } }
+    queue:    { type: object, properties: { tc_queue_length: {type: integer},
+                max_wait_sec: {type: integer} } }
+    metrics:  { type: object, properties: { avg_processing_sec: {type: integer},
+                p95_processing_sec: {type: integer}, failure_rate: {type: number},
+                retry_rate: {type: number}, throughput_1h: {type: integer} } }
+    throughput_24h:
+      type: array
+      items: { type: object, properties: { hour: {type: string, format: date-time},
+               success: {type: integer}, failed: {type: integer} } }
+    banners:
+      type: array
+      items: { type: object, properties: { severity: { $ref: '#/components/schemas/AlertSeverity' },
+               event_type: {type: string}, message: {type: string}, action_link: {type: string} } }
+
+WorkflowJobListItem:      # API Spec §11 스키마 그대로 필드화
+  type: object
+  properties:
+    job_id: {type: integer} · content_id · content_title · job_type · status ·
+    is_required: {type: boolean} · priority · retry_count · max_retry ·
+    next_attempt_at: {format: date-time, nullable: true} ·
+    worker: { $ref: '#/components/schemas/WorkerSummary' } ·
+    progress: { $ref: '#/components/schemas/ProgressSummary' } ·
+    started_at · finished_at · elapsed_sec · timeout_sec ·
+    timeout_imminent: {type: boolean} · locked_until · heartbeat_at ·
+    fail_reason_code: {nullable: true} · fail_message ·
+    available_actions: { type: array, items: { $ref: '#/components/schemas/JobAction' } }
+
+# $ref 규칙: 모든 참조는 완전 경로만 허용 —
+#   #/components/schemas/… | #/components/responses/… |
+#   #/components/parameters/… | #/components/securitySchemes/…
+# 축약 표기는 Swagger 도구에서 파싱 불가 (spectral lint로 CI 차단)
+
+WorkflowJobDetail: JobListItem + payload/result(object) + histories[] + attempts[] + lock + generated_renditions[]
+WorkflowContentListItem / Detail · WorkflowWorkerItem · WorkflowAlertItem: API Spec §7·8·17·21 스키마 대응
+
+CommandResult:
+  type: object
+  properties:
+    { …조작별 결과 필드…, available_actions: { type: array, items: {type: string} } }
+
+BatchCommandResult:
+  type: object
+  properties:
+    results:
+      type: array
+      items: { type: object, properties: { job_id: {type: integer}, success: {type: boolean},
+               error_code: {type: string, nullable: true} } }
+    succeeded: {type: integer}
+    failed: {type: integer}</pre>
+
+  <h2>13. Error Code Schema</h2>
+  <pre>ErrorCode:
+  type: string
+  enum: [UNAUTHORIZED, PERMISSION_DENIED, NOT_FOUND, VALIDATION_ERROR,
+         INVALID_STATE_TRANSITION, JOB_ALREADY_RUNNING, JOB_LOCK_NOT_FOUND,
+         JOB_NOT_RUNNING, JOB_NOT_FAILED, WORKER_OFFLINE, WORKER_DISABLED,
+         WORKER_NOT_DISABLED, WORKER_HEARTBEAT_MISSING, CONTENT_NOT_PROCESSING,
+         CONTENT_DELETED, REQUIRED_RENDITION_MISSING, INTERNAL_ERROR]</pre>
+  <table>
+    <tr><th style="width: 250px;">code</th><th style="width: 60px;">HTTP</th><th>의미</th></tr>
+    <tr><td>UNAUTHORIZED</td><td>401</td><td>미인증</td></tr>
+    <tr><td>PERMISSION_DENIED</td><td>403</td><td>권한 없음</td></tr>
+    <tr><td>NOT_FOUND</td><td>404</td><td>대상 없음</td></tr>
+    <tr><td>VALIDATION_ERROR</td><td>422</td><td>입력 검증 실패 (details 필드별)</td></tr>
+    <tr><td>INVALID_STATE_TRANSITION</td><td>409</td><td>상태 기계 전이 불가</td></tr>
+    <tr><td>JOB_ALREADY_RUNNING / JOB_LOCK_NOT_FOUND / JOB_NOT_RUNNING / JOB_NOT_FAILED</td><td>409</td><td>job 상태 제약</td></tr>
+    <tr><td>WORKER_OFFLINE / WORKER_DISABLED / WORKER_NOT_DISABLED / WORKER_HEARTBEAT_MISSING</td><td>409</td><td>worker 상태 제약</td></tr>
+    <tr><td>CONTENT_NOT_PROCESSING / CONTENT_DELETED</td><td>409</td><td>콘텐츠 상태 제약</td></tr>
+    <tr><td>REQUIRED_RENDITION_MISSING</td><td>409</td><td>필수 산출물 누락</td></tr>
+    <tr><td>INTERNAL_ERROR</td><td>500</td><td>서버 오류 (trace_id 포함)</td></tr>
+  </table>
+
+  <h2>14. Permission 문서화</h2>
+  <p>모든 path에 벤더 확장 <code>x-permission</code>을 선언한다 — Swagger UI 플러그인이 뱃지로 표시하고, 계약 테스트가 라우트 미들웨어와 대조한다.</p>
+  <pre>/jobs/{id}/release-lock:
+  post:
+    x-permission: workflow.release_lock
+    x-risk: HIGH          # LOW | MED | HIGH — UI 이중 확인 기준</pre>
+  <p class="muted">권한 체계: view / logs.view / retry / cancel / reprocess / release_lock / worker.manage / force_publish — Admin API Spec §3과 동일. HIGH는 <code>x-risk: HIGH</code>로 병기.</p>
+
+  <h2>15. available_actions 문서화</h2>
+  <p><code>available_actions</code>는 <b>서버가 현재 상태 × 호출자 권한으로 계산한 실행 가능 액션 배열</b>이다. 프론트는 이 배열만으로 버튼 노출을 결정하고 자체 판정 로직을 두지 않는다.</p>
+  <pre>ContentAction: { type: string, enum: [view_detail, reprocess, cancel, view_logs, publish_retry] }
+JobAction:     { type: string, enum: [view_logs, retry, cancel, release_lock, update_priority, view_content] }
+WorkerAction:  { type: string, enum: [disable, enable, clear_error, view_current_job, view_logs] }</pre>
+
+  <h2>16. Pagination / Sorting / Filtering</h2>
+  <ul>
+    <li><code>page</code>(기본 1) · <code>per_page</code>(기본 50, <b>최대 200</b>) — 초과 시 200으로 절삭.</li>
+    <li><code>sort</code>: 콤마 구분 + <code>-</code> 내림차순 (<code>sort=-priority,created_at</code>) — path별 화이트리스트를 parameter description에 명시, 목록 외 필드는 무시.</li>
+    <li>다중 status: <code>status=FAILED,TIMEOUT</code> (콤마 구분 — <code>style: form, explode: false</code>).</li>
+    <li><code>date_from</code>/<code>date_to</code>: ISO 8601, 반개구간 [from, to).</li>
+    <li><code>keyword</code>: 제목/파일명/uuid 부분 일치.</li>
+    <li>공통 파라미터는 <code>components.parameters</code>로 정의해 재사용(PageParam, PerPageParam, SortParam).</li>
+  </ul>
+
+  <h2>17. Example 모음</h2>
+  <table>
+    <tr><th style="width: 190px;">예시</th><th>요점</th></tr>
+    <tr><td>Dashboard 성공</td><td>§6 — API Spec §6 JSON 그대로 example로 등록</td></tr>
+    <tr><td>콘텐츠 목록/상세 성공</td><td>available_actions 포함, master는 <code>path_masked</code>만 노출됨을 example로 보여줌</td></tr>
+    <tr><td>Job 재시도 성공</td><td><code>{status: RETRY, retry_count: 0, next_attempt_at}</code></td></tr>
+    <tr><td>Job 재시도 409</td><td><code>INVALID_STATE_TRANSITION + current_state: SUCCESS + allowed_actions: [view_logs]</code></td></tr>
+    <tr><td>Lock 회수 성공 / 실패</td><td>§8 examples (released_lock / lockNotFound·notRunning)</td></tr>
+    <tr><td>Worker disable 성공</td><td>drain=true → draining job 목록 포함</td></tr>
+    <tr><td>Alert ack 성공(재호출)</td><td>멱등 — 동일 acknowledged_at</td></tr>
+    <tr><td>Validation Error</td><td>422 — <code>details: { reason: ["사유 입력이 필요합니다."] }</code></td></tr>
+    <tr><td>Permission Denied</td><td>403 — <code>PERMISSION_DENIED</code></td></tr>
+  </table>
+
+  <h2>18. OpenAPI YAML 초안 (골격)</h2>
+  <pre>openapi: 3.1.0
+info: { title: Frame CMS/MAM Workflow Admin API, version: 1.0.0 }
+servers: [ { url: /admin/workflows } ]
+security: [ { bearerAuth: [] } ]
+paths:
+  /dashboard:            { get:  §6 }
+  /contents:             { get:  §7 }
+  /contents/{id}:        { get:  §7 }
+  /contents/{id}/reprocess: { post: §7 }
+  /contents/{id}/cancel: { post: §7 }
+  /jobs:                 { get:  §8 }
+  /jobs/{id}:            { get:  §8 }
+  /jobs/{id}/retry:      { post: §8 }
+  /jobs/retry-batch:     { post: §8 }
+  /jobs/{id}/cancel:     { post: §8 }
+  /jobs/{id}/release-lock: { post: §8 }
+  /jobs/{id}/priority:   { patch: §8 }
+  /workers:              { get:  §9 }
+  /workers/{id}/disable: { post: §9 }
+  /workers/{id}/enable:  { post: §9 }
+  /workers/{id}/clear-error: { post: §9 }
+  /alerts:               { get:  §10 }
+  /alerts/{id}/ack:      { post: §10 }
+components:
+  securitySchemes: §3
+  parameters: { PageParam, PerPageParam, SortParam, DateFromParam, DateToParam }
+  schemas: §4 공통 + §5 enum + §11 request + §12 response + §13 ErrorCode
+  responses:
+    Forbidden:       { description: 권한 없음, content: … ErrorResponse(PERMISSION_DENIED) }
+    NotFound:        { description: 대상 없음, content: … ErrorResponse(NOT_FOUND) }
+    StateConflict:   { description: 상태 기계 충돌, content: … ErrorResponse + examples }
+    ValidationError: { description: 검증 실패, content: … ErrorResponse(VALIDATION_ERROR) }</pre>
+  <p class="muted">운영 규칙: openapi.yaml은 저장소에 단일 파일로 커밋, CI에서 ① 스키마 lint(spectral) ② 라우트 ↔ paths 일치 ③ x-permission ↔ 미들웨어 일치 계약 테스트를 실행한다.</p>
+
+  <h2>19. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>관리자 화면 하이파이 목업</b> — 본 계약을 데이터 소스로 사용하는 인터랙티브 프로토타입 (Frame CMS 디자인 시스템)</li>
+    <li><b>Mock 서버 시드</b> — examples 기반 Prism/MSW 목 데이터</li>
+    <li><b>장애 대응 Runbook</b> · <b>부하 테스트 계획</b></li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

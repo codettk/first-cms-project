@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page table.meta th { width: 110px; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; }
+  doc-page .muted { color: #6b7080; }
+  doc-page .ok { color: #2c6e49; font-weight: 700; }
+  doc-page .no { color: #b23a3a; font-weight: 700; }
+  doc-page .dash { color: #b0b4c0; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Workflow DB Table Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Workflow DB Table Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">워크플로우 DB 테이블 명세서 — Laravel + PostgreSQL 구현 기준</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: Workflow Job Type Definition v1.0</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>본 문서는 작업 유형 정의서(v1.0)에서 정의한 13개 워크플로우 작업을 실제로 저장·실행·추적하기 위한 PostgreSQL 테이블 설계를 정의한다. Laravel(Eloquent + Migration) 기반 구현을 전제로 하며, 첨부된 DDL은 <b>설계 검토용 초안</b>이다 — 최종 확정 전 성능 테스트와 파티셔닝 검토를 거친다.</p>
+  <p>설계 원칙: ① 콘텐츠 상태와 작업 상태의 분리 ② 상태 전이의 상태 기계 검증 ③ 이력(append-only)과 로그의 분리 ④ 원본(MASTER)과 파생 파일(rendition)의 분리 ⑤ 중복 실행을 막는 잠금(lease) 기반 동시성 제어.</p>
+
+  <h2>2. 전체 ERD 개념</h2>
+  <ul>
+    <li><code>contents</code> 1 — N <code>media_files</code> 1 — N <code>media_renditions</code> : 콘텐츠 → 논리 파일 → 물리 파생 파일 계층.</li>
+    <li><code>workflow_templates</code> 1 — N <code>workflow_template_steps</code> : 미디어 유형별 워크플로우 정의(설계도).</li>
+    <li><code>contents</code> 1 — N <code>workflow_instances</code> 1 — N <code>workflow_jobs</code> : 콘텐츠에 대해 템플릿을 인스턴스화한 실행 단위.</li>
+    <li><code>workflow_jobs</code> N — N (self) via <code>workflow_job_dependencies</code> : 선행/후행 DAG.</li>
+    <li><code>workflow_jobs</code> 1 — N <code>workflow_job_histories</code>(상태 전이), 1 — N <code>workflow_job_logs</code>(실행 로그).</li>
+    <li><code>workflow_worker_agents</code> 1 — N <code>workflow_job_locks</code> : Worker의 job lease.</li>
+    <li><code>contents</code> 1 — 1 <code>search_index_states</code> : 검색엔진 색인 동기화 상태.</li>
+  </ul>
+
+  <h2>3. 테이블 목록 요약</h2>
+  <table>
+    <tr><th style="width: 190px;">테이블</th><th>목적</th><th style="width: 120px;">증가 특성</th></tr>
+    <tr><td><code>contents</code></td><td>콘텐츠 마스터, 전체 상태 관리</td><td>콘텐츠당 1행</td></tr>
+    <tr><td><code>media_files</code></td><td>업로드된 논리 파일(원본 기준)</td><td>파일당 1행</td></tr>
+    <tr><td><code>media_renditions</code></td><td>원본·파생 파일(물리 파일) 관리</td><td>파일당 N행</td></tr>
+    <tr><td><code>workflow_templates</code></td><td>유형별 워크플로우 정의</td><td>정적(수 개)</td></tr>
+    <tr><td><code>workflow_template_steps</code></td><td>템플릿 내 작업 단계 정의</td><td>정적</td></tr>
+    <tr><td><code>workflow_instances</code></td><td>콘텐츠별 워크플로우 실행 인스턴스</td><td>콘텐츠당 1+행</td></tr>
+    <tr><td><code>workflow_jobs</code></td><td>실제 실행 작업 단위</td><td>인스턴스당 7~10행</td></tr>
+    <tr><td><code>workflow_job_dependencies</code></td><td>작업 간 선행 관계(DAG)</td><td>job당 0~3행</td></tr>
+    <tr><td><code>workflow_job_histories</code></td><td>상태 전이 이력 (append-only)</td><td>대용량 누적</td></tr>
+    <tr><td><code>workflow_job_logs</code></td><td>실행 상세 로그(stdout/stderr 등)</td><td>대용량 누적</td></tr>
+    <tr><td><code>workflow_worker_agents</code></td><td>Worker 등록·헬스 관리</td><td>Worker당 1행</td></tr>
+    <tr><td><code>workflow_job_locks</code></td><td>job lease(중복 실행 방지)</td><td>RUNNING job당 1행</td></tr>
+    <tr><td><code>search_index_states</code></td><td>콘텐츠별 색인 동기화 상태</td><td>콘텐츠당 1행</td></tr>
+    <tr><td><code>transcode_profiles</code></td><td>트랜스코딩 출력 프리셋 정의 (Transcode Profile Spec)</td><td>정적</td></tr>
+    <tr><td><code>workflow_job_progresses</code></td><td>RUNNING job 진행률 (job_id PK, upsert 전용 — Queue Spec §10)</td><td>RUNNING job당 1행</td></tr>
+    <tr><td><code>admin_audit_logs</code></td><td>관리자 조작 감사 로그 (append-only — Admin API Spec §22)</td><td>조작당 1행</td></tr>
+    <tr><td><code>workflow_job_allowed_transitions</code></td><td>상태 전이 허용표 — trigger 참조 (State Machine Spec §17)</td><td>정적</td></tr>
+  </table>
+
+  <h2>4. 테이블별 상세 명세</h2>
+
+  <h3>4.1 contents</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>콘텐츠 마스터 레코드. 콘텐츠 전체 상태(라이프사이클)를 관리하며 workflow job 상태와 분리한다.</td></tr>
+    <tr><th>사용 시나리오</th><td>업로드 시 생성(UPLOADING) → 등록(REGISTERED) → 워크플로우 시작(PROCESSING) → PUBLISH 성공(READY). 목록/상세 API의 루트 엔터티.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK, identity</td><td>콘텐츠 ID</td></tr>
+    <tr><td><code>uuid</code></td><td><code>uuid</code></td><td>N</td><td>UQ, <code>gen_random_uuid()</code></td><td>외부 노출용 ID (API·URL은 uuid만 사용)</td></tr>
+    <tr><td><code>title</code></td><td><code>varchar(500)</code></td><td>N</td><td>—</td><td>콘텐츠 제목</td></tr>
+    <tr><td><code>description</code></td><td><code>text</code></td><td>Y</td><td>—</td><td>설명</td></tr>
+    <tr><td><code>media_type</code></td><td><code>varchar(10)</code></td><td>Y</td><td>CHECK: VIDEO/IMAGE/AUDIO/DOC</td><td>MA 확정 전 NULL, 확정 후 갱신</td></tr>
+    <tr><td><code>status</code></td><td><code>varchar(20)</code></td><td>N</td><td><code>'UPLOADING'</code>, CHECK(§5)</td><td>콘텐츠 상태</td></tr>
+    <tr><td><code>workflow_version</code></td><td><code>varchar(20)</code></td><td>Y</td><td>—</td><td>인스턴스 생성 시점의 템플릿 버전 스냅샷</td></tr>
+    <tr><td><code>published_at</code></td><td><code>timestamptz</code></td><td>Y</td><td>—</td><td>READY 전환 시각</td></tr>
+    <tr><td><code>created_by</code></td><td><code>bigint</code></td><td>N</td><td>FK → users.id</td><td>업로더</td></tr>
+    <tr><td><code>created_at / updated_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>Laravel timestamps</td></tr>
+    <tr><td><code>deleted_at</code></td><td><code>timestamptz</code></td><td>Y</td><td>—</td><td>soft delete (DELETED 상태와 병행)</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>(status, created_at DESC)</code> — 상태별 목록 조회. <code>(media_type, status)</code> — 유형별 대시보드. <code>uuid</code> UNIQUE.<br>
+  <b>예시</b>: <code>id=1001, uuid=…, title='video_001', media_type='VIDEO', status='READY'</code><br>
+  <b>운영 주의</b>: 상태 변경은 반드시 상태 기계 검증(§6)을 거친 트랜잭션으로. DELETED 콘텐츠에는 신규 job 생성을 금지(애플리케이션 가드 + 트리거).</p>
+
+  <h3>4.2 media_files</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>업로드된 논리 파일 단위 관리. 원본 파일의 식별·무결성 정보를 보관한다.</td></tr>
+    <tr><th>사용 시나리오</th><td>업로드 완료 시 생성. TM이 <code>master_path</code> 확정, VERIFY가 checksum 대조. 콘텐츠 1건에 다중 파일(멀티파트 자산) 허용.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK, identity</td><td>파일 ID</td></tr>
+    <tr><td><code>content_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → contents.id</td><td>소속 콘텐츠</td></tr>
+    <tr><td><code>original_filename</code></td><td><code>varchar(500)</code></td><td>N</td><td>—</td><td>업로드 원본 파일명</td></tr>
+    <tr><td><code>ext</code></td><td><code>varchar(20)</code></td><td>N</td><td>—</td><td>확장자(소문자)</td></tr>
+    <tr><td><code>detected_mime</code></td><td><code>varchar(100)</code></td><td>Y</td><td>—</td><td>VERIFY가 판정한 실제 MIME</td></tr>
+    <tr><td><code>file_size</code></td><td><code>bigint</code></td><td>N</td><td>CHECK &gt; 0</td><td>바이트</td></tr>
+    <tr><td><code>checksum</code></td><td><code>varchar(64)</code></td><td>N</td><td>—</td><td>SHA-256 (업로드 시 계산)</td></tr>
+    <tr><td><code>temp_path</code></td><td><code>varchar(1000)</code></td><td>Y</td><td>—</td><td>Temp Storage 경로 (CLEANUP 후 NULL)</td></tr>
+    <tr><td><code>media_info</code></td><td><code>jsonb</code></td><td>Y</td><td>—</td><td>MA 추출 결과 전체(JSON)</td></tr>
+    <tr><td><code>created_at / updated_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>—</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>content_id</code>. <code>checksum</code> — 중복 업로드 탐지 조회.<br>
+  <b>예시</b>: <code>id=5001, content_id=1001, original_filename='video_001.mov', file_size=8123456789, checksum='ab3f…'</code><br>
+  <b>운영 주의</b>: <code>media_info</code>는 raw 추출값 저장 — 조회 빈도 높은 값(길이·해상도)은 renditions/검색 색인에 중복 보관.</p>
+
+  <h3>4.3 media_renditions</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>원본(MASTER)과 모든 파생 파일(물리 파일)을 단일 모델로 관리. 웹 표출은 이 테이블의 비-MASTER rendition만 참조한다.</td></tr>
+    <tr><th>사용 시나리오</th><td>TM이 MASTER 생성, TC/IMAGE_TC/AUDIO_TC/CA/DOC_PREVIEW가 각 rendition 생성. 상세 API는 content_id + rendition_type으로 조회.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK, identity</td><td>—</td></tr>
+    <tr><td><code>content_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → contents.id</td><td>비정규화 — 조회 최적화</td></tr>
+    <tr><td><code>media_file_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → media_files.id</td><td>파생 원천 파일</td></tr>
+    <tr><td><code>rendition_type</code></td><td><code>varchar(30)</code></td><td>N</td><td>CHECK(§8 목록)</td><td>MASTER / PROXY_VIDEO / … / EXTRACTED_TEXT</td></tr>
+    <tr><td><code>storage_zone</code></td><td><code>varchar(30)</code></td><td>N</td><td>CHECK: TEMP/MASTER/PROXY/THUMBNAIL/CATALOG/DOCUMENT/ARCHIVE</td><td>저장소 구역 — MASTER zone은 웹 접근 금지</td></tr>
+    <tr><td><code>variant_key</code></td><td><code>varchar(50)</code></td><td>N</td><td><code>'default'</code></td><td>동일 rendition_type 내 변형 구분 (720p, thumb_480…) — 다중 화질 확장 키</td></tr>
+    <tr><td><code>path</code></td><td><code>varchar(1000)</code></td><td>N</td><td>UQ <code>(storage_zone, path)</code></td><td>스토리지 내 경로</td></tr>
+    <tr><td><code>file_size</code></td><td><code>bigint</code></td><td>Y</td><td>—</td><td>바이트</td></tr>
+    <tr><td><code>checksum</code></td><td><code>varchar(64)</code></td><td>Y</td><td>—</td><td>SHA-256</td></tr>
+    <tr><td><code>mime_type</code></td><td><code>varchar(100)</code></td><td>Y</td><td>—</td><td>—</td></tr>
+    <tr><td><code>width / height</code></td><td><code>int</code></td><td>Y</td><td>—</td><td>영상·이미지</td></tr>
+    <tr><td><code>duration_ms</code></td><td><code>bigint</code></td><td>Y</td><td>—</td><td>영상·오디오 길이</td></tr>
+    <tr><td><code>page_no</code></td><td><code>int</code></td><td>Y</td><td>—</td><td>문서 페이지 미리보기용</td></tr>
+    <tr><td><code>timecode_ms</code></td><td><code>bigint</code></td><td>Y</td><td>—</td><td>CATALOG 추출 시점</td></tr>
+    <tr><td><code>profile_id</code></td><td><code>bigint</code></td><td>Y</td><td>FK → transcode_profiles.id</td><td>생성 프리셋</td></tr>
+    <tr><td><code>created_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>—</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>(content_id, rendition_type)</code> — 상세 화면 핵심 조회. <code>(storage_zone, path)</code> UNIQUE — 경로 중복 방지. <code>checksum</code>.<br>
+  <b>예시</b>: <code>content_id=1001, rendition_type='PROXY_VIDEO', storage_zone='PROXY', path='proxy/2026/07/1001_720p.mp4', width=1280, height=720, duration_ms=734000</code><br>
+  <b>운영 주의</b>: 재실행(멱등) 시 같은 <code>(content_id, rendition_type, variant_key, page_no/timecode)</code> 행은 upsert (unique 상세는 Migration Spec §7). MASTER 행 삭제는 콘텐츠 완전 삭제 배치에서만 허용.</p>
+
+  <h3>4.4 workflow_templates</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>미디어 유형별 워크플로우 정의(설계도). 버전 관리로 정의 변경 시 기존 인스턴스에 영향 없음.</td></tr>
+    <tr><th>사용 시나리오</th><td>MA의 media_type 확정 → 활성 템플릿 선택 → 인스턴스 생성. 예: <code>VIDEO_INGEST</code> v3.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK</td><td>—</td></tr>
+    <tr><td><code>code</code></td><td><code>varchar(50)</code></td><td>N</td><td>UQ <code>(code, version)</code></td><td>예: VIDEO_INGEST</td></tr>
+    <tr><td><code>name</code></td><td><code>varchar(200)</code></td><td>N</td><td>—</td><td>표시명</td></tr>
+    <tr><td><code>media_type</code></td><td><code>varchar(10)</code></td><td>N</td><td>CHECK</td><td>대상 유형</td></tr>
+    <tr><td><code>version</code></td><td><code>int</code></td><td>N</td><td><code>1</code></td><td>템플릿 버전</td></tr>
+    <tr><td><code>is_active</code></td><td><code>boolean</code></td><td>N</td><td><code>true</code></td><td>유형당 활성 1건 (partial UQ)</td></tr>
+    <tr><td><code>created_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>—</td></tr>
+  </table>
+  <p><b>인덱스</b>: partial UNIQUE <code>(media_type) WHERE is_active</code> — 유형당 활성 템플릿 1건 보장.<br>
+  <b>운영 주의</b>: 템플릿은 수정하지 않고 새 버전 추가 후 활성 전환 — 실행 중 인스턴스와의 불일치 방지.</p>
+
+  <h3>4.5 workflow_template_steps</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>템플릿을 구성하는 작업 단계와 기본 정책(필수 여부·재시도·타임아웃·의존)을 정의.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK</td><td>—</td></tr>
+    <tr><td><code>template_id</code></td><td><code>bigint</code></td><td>N</td><td>FK, UQ <code>(template_id, job_type)</code></td><td>소속 템플릿</td></tr>
+    <tr><td><code>job_type</code></td><td><code>varchar(30)</code></td><td>N</td><td>CHECK(13종 + 선택 작업)</td><td>TM / VERIFY / MA / TC / …</td></tr>
+    <tr><td><code>step_order</code></td><td><code>int</code></td><td>N</td><td>—</td><td>표시 순서(실행 순서는 의존으로 결정)</td></tr>
+    <tr><td><code>is_required</code></td><td><code>boolean</code></td><td>N</td><td><code>true</code></td><td>false = 선택 작업(실패해도 PUBLISH 비차단)</td></tr>
+    <tr><td><code>max_retry</code></td><td><code>int</code></td><td>N</td><td><code>3</code></td><td>기본 재시도 횟수</td></tr>
+    <tr><td><code>timeout_sec</code></td><td><code>int</code></td><td>N</td><td><code>600</code></td><td>기본 타임아웃</td></tr>
+    <tr><td><code>depends_on</code></td><td><code>jsonb</code></td><td>Y</td><td>—</td><td>선행 job_type 배열, 예: <code>["MA"]</code></td></tr>
+    <tr><td><code>config</code></td><td><code>jsonb</code></td><td>Y</td><td>—</td><td>작업별 설정(프로파일, 추출 시점 등)</td></tr>
+  </table>
+  <p><b>운영 주의</b>: <code>depends_on</code>은 인스턴스화 시 <code>workflow_job_dependencies</code> 실제 행으로 풀어서 생성한다.</p>
+
+  <h3>4.6 workflow_instances</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>특정 콘텐츠에 대해 템플릿을 인스턴스화한 실행 단위. 재처리 시 새 인스턴스를 만들어 이력을 보존.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK</td><td>—</td></tr>
+    <tr><td><code>content_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → contents.id</td><td>—</td></tr>
+    <tr><td><code>template_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → workflow_templates.id</td><td>사용 템플릿(버전 고정)</td></tr>
+    <tr><td><code>status</code></td><td><code>varchar(20)</code></td><td>N</td><td><code>'RUNNING'</code>, CHECK: RUNNING/SUCCESS/FAILED/CANCELED</td><td>인스턴스 집계 상태</td></tr>
+    <tr><td><code>started_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>—</td></tr>
+    <tr><td><code>finished_at</code></td><td><code>timestamptz</code></td><td>Y</td><td>—</td><td>—</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>(content_id, started_at DESC)</code> — 콘텐츠별 최신 인스턴스. <code>status</code> partial <code>WHERE status='RUNNING'</code>.<br>
+  <b>운영 주의</b>: 콘텐츠당 RUNNING 인스턴스는 1건만 허용 (partial UNIQUE <code>(content_id) WHERE status='RUNNING'</code>).</p>
+
+  <h3>4.7 workflow_jobs</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>실제 실행되는 작업 단위. Worker가 소비하는 큐의 원본 데이터이자 상태 기계의 주체.</td></tr>
+    <tr><th>사용 시나리오</th><td>인스턴스 생성 시 일괄 생성(WAITING) → 선행 SUCCESS 시 READY → Worker lease 후 RUNNING → SUCCESS/FAILED/….</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK</td><td>job_id</td></tr>
+    <tr><td><code>instance_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → workflow_instances.id</td><td>—</td></tr>
+    <tr><td><code>content_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → contents.id</td><td>비정규화 — 조회 최적화</td></tr>
+    <tr><td><code>job_type</code></td><td><code>varchar(30)</code></td><td>N</td><td>CHECK, UQ <code>(instance_id, job_type)</code></td><td>—</td></tr>
+    <tr><td><code>status</code></td><td><code>varchar(20)</code></td><td>N</td><td><code>'WAITING'</code>, CHECK(§5)</td><td>9종 작업 상태</td></tr>
+    <tr><td><code>is_required</code></td><td><code>boolean</code></td><td>N</td><td><code>true</code></td><td>템플릿 step에서 복사</td></tr>
+    <tr><td><code>priority</code></td><td><code>smallint</code></td><td>N</td><td><code>100</code>, CHECK 0~1000</td><td>Claim 정렬: <code>priority DESC, created_at ASC</code></td></tr>
+    <tr><td><code>cancel_requested_at</code></td><td><code>timestamptz</code></td><td>Y</td><td>—</td><td>RUNNING 취소 요청 마킹 — Worker가 폴링</td></tr>
+    <tr><td><code>retry_count</code></td><td><code>int</code></td><td>N</td><td><code>0</code></td><td>—</td></tr>
+    <tr><td><code>max_retry</code></td><td><code>int</code></td><td>N</td><td><code>3</code></td><td>—</td></tr>
+    <tr><td><code>timeout_sec</code></td><td><code>int</code></td><td>N</td><td><code>600</code></td><td>—</td></tr>
+    <tr><td><code>next_attempt_at</code></td><td><code>timestamptz</code></td><td>Y</td><td>—</td><td>RETRY 백오프 예약 시각</td></tr>
+    <tr><td><code>payload</code></td><td><code>jsonb</code></td><td>Y</td><td>—</td><td>입력 파라미터(경로·프로파일 등)</td></tr>
+    <tr><td><code>result</code></td><td><code>jsonb</code></td><td>Y</td><td>—</td><td>출력 요약(생성 rendition id 등)</td></tr>
+    <tr><td><code>fail_reason_code</code></td><td><code>varchar(50)</code></td><td>Y</td><td>—</td><td>표준화된 실패 코드</td></tr>
+    <tr><td><code>worker_id</code></td><td><code>bigint</code></td><td>Y</td><td>FK → workflow_worker_agents.id</td><td>마지막 실행 Worker</td></tr>
+    <tr><td><code>started_at / finished_at</code></td><td><code>timestamptz</code></td><td>Y</td><td>—</td><td>—</td></tr>
+    <tr><td><code>created_at / updated_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>—</td></tr>
+  </table>
+  <p><b>인덱스</b> (§10 상세): <code>(status, next_attempt_at)</code> partial <code>WHERE status IN ('READY','RETRY')</code> — 큐 소비. <code>(status, started_at)</code> partial <code>WHERE status='RUNNING'</code> — 타임아웃 스캔. <code>content_id</code>, <code>instance_id</code>, <code>(worker_id, status)</code>, <code>(status, finished_at DESC) WHERE status='FAILED'</code>.<br>
+  <b>예시</b>: <code>id=90007, instance_id=7001, job_type='TC', status='SUCCESS', retry_count=0, result={"rendition_id":8102}</code><br>
+  <b>운영 주의</b>: 상태 변경은 반드시 이력 기록과 같은 트랜잭션. 대량 누적 시 월 단위 파티셔닝 검토(완료 job 아카이브).</p>
+
+  <h3>4.8 workflow_job_dependencies</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>작업 간 선행 관계(DAG) 저장. Worker 스케줄러가 READY 전환 판정에 사용.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>job_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → workflow_jobs.id, PK(복합)</td><td>후행 작업</td></tr>
+    <tr><td><code>depends_on_job_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → workflow_jobs.id, PK(복합), CHECK ≠ job_id</td><td>선행 작업</td></tr>
+  </table>
+  <p><b>인덱스</b>: PK <code>(job_id, depends_on_job_id)</code> + 역방향 <code>(depends_on_job_id)</code> — 선행 완료 시 후행 탐색.<br>
+  <b>READY 전환 쿼리</b>: 선행 job이 모두 SUCCESS(또는 SKIPPED)인 WAITING job을 READY로 갱신.<br>
+  <b>운영 주의</b>: 인스턴스화 시 사이클 검증(DAG 보장)을 애플리케이션에서 수행.</p>
+
+  <h3>4.9 workflow_job_histories</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>작업 상태 전이 이력. append-only — UPDATE/DELETE 금지.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK</td><td>—</td></tr>
+    <tr><td><code>job_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → workflow_jobs.id</td><td>—</td></tr>
+    <tr><td><code>from_status</code></td><td><code>varchar(20)</code></td><td>Y</td><td>—</td><td>NULL = 최초 생성</td></tr>
+    <tr><td><code>to_status</code></td><td><code>varchar(20)</code></td><td>N</td><td>—</td><td>—</td></tr>
+    <tr><td><code>actor</code></td><td><code>varchar(50)</code></td><td>N</td><td>—</td><td>scheduler / worker:{id} / admin:{user_id}</td></tr>
+    <tr><td><code>note</code></td><td><code>text</code></td><td>Y</td><td>—</td><td>전이 사유(실패 코드, 수동 재시도 등)</td></tr>
+    <tr><td><code>created_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>—</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>(job_id, created_at)</code>.<br>
+  <b>운영 주의</b>: 대용량 누적 — 월 파티셔닝 + 보존 정책(예: 12개월 후 콜드 스토리지) 적용.</p>
+
+  <h3>4.10 workflow_job_logs</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>실행 상세 로그(명령어·stdout·stderr·결과 JSON). 이력과 분리하여 대용량 텍스트를 별도 관리.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK</td><td>—</td></tr>
+    <tr><td><code>job_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → workflow_jobs.id</td><td>—</td></tr>
+    <tr><td><code>attempt_no</code></td><td><code>int</code></td><td>N</td><td><code>1</code></td><td>재시도 회차</td></tr>
+    <tr><td><code>level</code></td><td><code>varchar(10)</code></td><td>N</td><td><code>'INFO'</code>, CHECK: DEBUG/INFO/WARN/ERROR</td><td>—</td></tr>
+    <tr><td><code>command</code></td><td><code>text</code></td><td>Y</td><td>—</td><td>실행 명령(ffmpeg 등)</td></tr>
+    <tr><td><code>stdout / stderr</code></td><td><code>text</code></td><td>Y</td><td>—</td><td>상한(예: 1MB) 초과분은 오브젝트 스토리지 링크</td></tr>
+    <tr><td><code>message</code></td><td><code>text</code></td><td>Y</td><td>—</td><td>요약 메시지(관리자 화면 표시용)</td></tr>
+    <tr><td><code>detail</code></td><td><code>jsonb</code></td><td>Y</td><td>—</td><td>처리 결과 JSON</td></tr>
+    <tr><td><code>created_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>—</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>(job_id, attempt_no, created_at)</code>. <code>(level, created_at DESC) WHERE level='ERROR'</code>.<br>
+  <b>운영 주의</b>: 보존 기간을 이력보다 짧게(예: 90일). 파티셔닝 필수 후보.</p>
+
+  <h3>4.11 workflow_worker_agents</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>Worker 프로세스 등록·헬스체크·용량 관리. 스케줄러의 배정 기준.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>id</code></td><td><code>bigint</code></td><td>N</td><td>PK</td><td>worker_id</td></tr>
+    <tr><td><code>worker_name</code></td><td><code>varchar(100)</code></td><td>N</td><td>UQ</td><td>예: tc-worker-01</td></tr>
+    <tr><td><code>worker_type</code></td><td><code>varchar(30)</code></td><td>N</td><td>—</td><td>TRANSCODE / GENERAL / OCR …</td></tr>
+    <tr><td><code>supported_job_types</code></td><td><code>jsonb</code></td><td>N</td><td>—</td><td>예: <code>["TC","AUDIO_TC"]</code></td></tr>
+    <tr><td><code>hostname / ip_address</code></td><td><code>varchar / inet</code></td><td>N</td><td>—</td><td>—</td></tr>
+    <tr><td><code>status</code></td><td><code>varchar(15)</code></td><td>N</td><td><code>'OFFLINE'</code>, CHECK: ONLINE/OFFLINE/BUSY/DISABLED/ERROR</td><td>—</td></tr>
+    <tr><td><code>last_heartbeat_at</code></td><td><code>timestamptz</code></td><td>Y</td><td>—</td><td>N초 미수신 시 OFFLINE 처리</td></tr>
+    <tr><td><code>current_job_id</code></td><td><code>bigint</code></td><td>Y</td><td>FK → workflow_jobs.id</td><td>—</td></tr>
+    <tr><td><code>max_concurrency</code></td><td><code>int</code></td><td>N</td><td><code>1</code></td><td>—</td></tr>
+    <tr><td><code>gpu_available</code></td><td><code>boolean</code></td><td>N</td><td><code>false</code></td><td>—</td></tr>
+    <tr><td><code>cpu_count / memory_limit_mb</code></td><td><code>int</code></td><td>Y</td><td>—</td><td>—</td></tr>
+    <tr><td><code>version</code></td><td><code>varchar(30)</code></td><td>Y</td><td>—</td><td>Worker 빌드 버전</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>(status, worker_type)</code>. <code>last_heartbeat_at</code> — 헬스 스캔.<br>
+  <b>운영 주의</b>: heartbeat 갱신은 고빈도 UPDATE — fillfactor 조정 또는 별도 heartbeat 테이블 검토.</p>
+
+  <h3>4.12 workflow_job_locks</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>job lease 기반 중복 실행 방지. RUNNING job 1건당 lock 1행.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>job_id</code></td><td><code>bigint</code></td><td>N</td><td>PK, FK → workflow_jobs.id</td><td>job당 1 lock 보장</td></tr>
+    <tr><td><code>locked_by_worker_id</code></td><td><code>bigint</code></td><td>N</td><td>FK → workflow_worker_agents.id</td><td>—</td></tr>
+    <tr><td><code>locked_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>—</td></tr>
+    <tr><td><code>locked_until</code></td><td><code>timestamptz</code></td><td>N</td><td>—</td><td>lease 만료 시각</td></tr>
+    <tr><td><code>heartbeat_at</code></td><td><code>timestamptz</code></td><td>N</td><td><code>now()</code></td><td>실행 중 주기적 연장</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>locked_until</code> — 만료 lease 회수 스캔.<br>
+  <b>운영 주의</b>: PK가 job_id이므로 중복 lease는 DB 레벨에서 원천 차단. 만료 회수 시 job을 RETRY로 전환하고 이력 기록.</p>
+
+  <h3>4.13 search_index_states</h3>
+  <table class="meta">
+    <tr><th>목적</th><td>콘텐츠별 검색엔진 색인 동기화 상태. 재색인 대상 탐지에 사용.</td></tr>
+  </table>
+  <table>
+    <tr><th style="width: 150px;">컬럼</th><th style="width: 130px;">타입</th><th style="width: 46px;">NULL</th><th style="width: 120px;">기본값 / 제약</th><th>설명</th></tr>
+    <tr><td><code>content_id</code></td><td><code>bigint</code></td><td>N</td><td>PK, FK → contents.id</td><td>1:1</td></tr>
+    <tr><td><code>index_doc_id</code></td><td><code>varchar(100)</code></td><td>Y</td><td>—</td><td>검색엔진 문서 ID</td></tr>
+    <tr><td><code>index_version</code></td><td><code>bigint</code></td><td>N</td><td><code>0</code></td><td>색인 시퀀스</td></tr>
+    <tr><td><code>status</code></td><td><code>varchar(20)</code></td><td>N</td><td><code>'PENDING'</code>, CHECK: PENDING/INDEXED/STALE/FAILED</td><td>STALE = 재색인 필요</td></tr>
+    <tr><td><code>indexed_at</code></td><td><code>timestamptz</code></td><td>Y</td><td>—</td><td>—</td></tr>
+    <tr><td><code>last_error</code></td><td><code>text</code></td><td>Y</td><td>—</td><td>—</td></tr>
+  </table>
+  <p><b>인덱스</b>: <code>status</code> partial <code>WHERE status IN ('PENDING','STALE','FAILED')</code> — 재색인 큐 스캔.<br>
+  <b>운영 주의</b>: 메타데이터 수정·선택 작업 완료 이벤트에서 status를 STALE로 마킹 → INDEX job 재실행.</p>
+
+  <h3>4.14 transcode_profiles (추가 제안)</h3>
+  <p>TC/IMAGE_TC/AUDIO_TC의 출력 프리셋(코덱·해상도·비트레이트·포맷)을 코드가 아닌 데이터로 관리: <code>id, code(UQ), media_type, output_format, params(jsonb), is_active</code>. rendition·job payload가 <code>profile_id</code>로 참조하여 재현 가능성을 보장한다.</p>
+
+  <h2>5. 상태값 정의</h2>
+  <table>
+    <tr><th style="width: 170px;">구분</th><th>상태값</th></tr>
+    <tr><td>콘텐츠 <code>contents.status</code></td><td><code>UPLOADING</code> → <code>REGISTERED</code> → <code>PROCESSING</code> → <code>READY</code> / <code>FAILED</code>, 이후 <code>ARCHIVED</code> / <code>DELETED</code></td></tr>
+    <tr><td>작업 <code>workflow_jobs.status</code></td><td><code>WAITING</code> / <code>READY</code> / <code>RUNNING</code> / <code>SUCCESS</code> / <code>FAILED</code> / <code>RETRY</code> / <code>SKIPPED</code> / <code>CANCELED</code> / <code>TIMEOUT</code></td></tr>
+    <tr><td>Worker <code>status</code></td><td><code>ONLINE</code> / <code>OFFLINE</code> / <code>BUSY</code> / <code>DISABLED</code> / <code>ERROR</code></td></tr>
+    <tr><td>색인 <code>status</code></td><td><code>PENDING</code> / <code>INDEXED</code> / <code>STALE</code> / <code>FAILED</code></td></tr>
+  </table>
+
+  <h2>6. 상태 전이표 (workflow_jobs)</h2>
+  <table>
+    <tr><th style="width: 90px;">From \ To</th><th>READY</th><th>RUNNING</th><th>SUCCESS</th><th>FAILED</th><th>RETRY</th><th>SKIPPED</th><th>CANCELED</th><th>TIMEOUT</th></tr>
+    <tr><td><code>WAITING</code></td><td class="ok">○</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○</td><td class="ok">○</td><td class="dash">—</td></tr>
+    <tr><td><code>READY</code></td><td class="dash">—</td><td class="ok">○</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○</td><td class="ok">○</td><td class="dash">—</td></tr>
+    <tr><td><code>RUNNING</code></td><td class="dash">—</td><td class="dash">—</td><td class="ok">○</td><td class="ok">○</td><td class="ok">○</td><td class="dash">—</td><td class="ok">○</td><td class="ok">○</td></tr>
+    <tr><td><code>RETRY</code></td><td class="ok">○</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○*</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○</td><td class="dash">—</td></tr>
+    <tr><td><code>TIMEOUT</code></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○*</td><td class="ok">○</td><td class="dash">—</td><td class="ok">○</td><td class="dash">—</td></tr>
+    <tr><td><code>FAILED</code></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="ok">○(수동)</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+    <tr><td><code>SUCCESS</code></td><td class="dash">—</td><td class="no">✕</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+    <tr><td><code>SKIPPED / CANCELED</code></td><td colspan="8" class="dash">종결 상태 — 전이 불가 (관리자 수동 재실행은 새 attempt로 처리)</td></tr>
+  </table>
+  <p class="muted">○* = 재시도 소진 시 FAILED 확정. SUCCESS → RUNNING 전이는 금지(멱등 재실행은 새 attempt_no로 기록).</p>
+  <p><b>검증 방식</b>: ① 애플리케이션 — 상태 기계 맵을 단일 서비스 클래스(Laravel <code>JobStateMachine</code>)에 두고 모든 전이가 이를 경유. ② DB — <code>UPDATE … WHERE id=? AND status=?</code>(낙관적 CAS)로 경합 차단 + 전이표 기반 트리거(<code>BEFORE UPDATE</code>)를 2차 방어선으로 배치. ③ DELETED 콘텐츠 job 생성 금지 — INSERT 트리거에서 contents.status 검사.</p>
+
+  <h2>7. 작업 의존 관계 저장 방식</h2>
+  <p>템플릿 단계의 <code>depends_on</code>(jsonb)을 인스턴스화 시점에 <code>workflow_job_dependencies</code>의 실제 job_id 쌍으로 풀어서 저장한다. 스케줄러는 아래 쿼리로 READY 전환 대상을 찾는다:</p>
+  <pre>UPDATE workflow_jobs j SET status = 'READY', updated_at = now()
+WHERE j.status = 'WAITING'
+  AND NOT EXISTS (
+    SELECT 1 FROM workflow_job_dependencies d
+    JOIN workflow_jobs p ON p.id = d.depends_on_job_id
+    WHERE d.job_id = j.id AND p.status NOT IN ('SUCCESS','SKIPPED')
+  );</pre>
+
+  <h2>8. 파일·파생 파일 저장 방식</h2>
+  <p><code>media_files</code>(논리 파일) — <code>media_renditions</code>(물리 파일) 분리. <code>rendition_type</code> 허용값:</p>
+  <p><code>MASTER</code> · <code>PROXY_VIDEO</code> · <code>PROXY_IMAGE</code> · <code>PROXY_AUDIO</code> · <code>THUMBNAIL</code> · <code>CATALOG</code> · <code>PAGE_PREVIEW</code> · <code>DOCUMENT_PREVIEW</code> · <code>WAVEFORM</code> · <code>OCR_TEXT</code> · <code>EXTRACTED_TEXT</code></p>
+  <ul>
+    <li>웹 API는 <code>storage_zone != 'MASTER'</code>인 rendition만 서빙한다 — 쿼리 레벨 가드 + 스토리지 네트워크 분리 이중 방어.</li>
+    <li>MASTER 다운로드는 권한 검사 후 서명된 임시 URL 발급 방식으로만 제공.</li>
+    <li>CATALOG는 <code>timecode_ms</code>, PAGE_PREVIEW는 <code>page_no</code>로 다건 관리.</li>
+    <li>OCR_TEXT/EXTRACTED_TEXT는 파일 대신 텍스트 산출물 — path에 텍스트 파일 경로 또는 detail 참조 저장.</li>
+    <li><b>장기 검토(P3)</b>: 텍스트 산출물은 추후 <code>media_texts</code> 테이블 분리 검토 — 후보 컬럼: id · content_id · media_file_id · rendition_id? · text_type(OCR|EXTRACTED|STT) · page_no? · timecode_ms? · text · confidence? · lang? · metadata jsonb · created_at. 현행 파일 경로 저장 방식은 유지.</li>
+  </ul>
+
+  <h2>9. Worker Agent 및 Lock 설계</h2>
+  <p><b>소비(claim) 흐름</b> — PostgreSQL 기준, lease + SKIP LOCKED 병행:</p>
+  <pre>BEGIN;
+SELECT id FROM workflow_jobs
+WHERE status IN ('READY','RETRY')
+  AND (next_attempt_at IS NULL OR next_attempt_at &lt;= now())
+  AND job_type = ANY($supported)
+ORDER BY created_at
+LIMIT 1
+FOR UPDATE SKIP LOCKED;
+
+INSERT INTO workflow_job_locks (job_id, locked_by_worker_id, locked_until)
+VALUES ($job_id, $worker_id, now() + interval '10 minutes');
+
+UPDATE workflow_jobs SET status='RUNNING', worker_id=$worker_id,
+  started_at=now(), retry_count=retry_count+... WHERE id=$job_id AND status IN ('READY','RETRY');
+COMMIT;</pre>
+  <ul>
+    <li><code>FOR UPDATE SKIP LOCKED</code> — 동시 claim 경합 제거. <code>workflow_job_locks</code> PK — 중복 lease DB 차단.</li>
+    <li>Worker는 실행 중 heartbeat마다 <code>locked_until</code>을 연장. 연장 실패(네트워크 단절) 시 자체 중단.</li>
+    <li>스케줄러 배치가 <code>locked_until &lt; now()</code>인 lock을 회수 → job을 RETRY(또는 TIMEOUT)로 전환 + 이력 기록.</li>
+    <li>Worker OFFLINE 판정: <code>last_heartbeat_at</code>이 3주기 이상 미갱신.</li>
+  </ul>
+
+  <h2>10. 인덱스 설계</h2>
+  <table>
+    <tr><th style="width: 300px;">인덱스</th><th>사유</th></tr>
+    <tr><td><code>jobs (status, next_attempt_at) WHERE status IN ('READY','RETRY')</code></td><td>큐 소비 핵심 경로 — partial index로 크기 최소화, 상시 고빈도</td></tr>
+    <tr><td><code>jobs (started_at) WHERE status='RUNNING'</code></td><td>타임아웃 스캔 배치(started_at + timeout_sec &lt; now())</td></tr>
+    <tr><td><code>jobs (content_id)</code></td><td>콘텐츠 처리 상세 화면의 job 목록 조회</td></tr>
+    <tr><td><code>jobs (instance_id)</code></td><td>인스턴스 단위 집계·PUBLISH 필수 작업 체크</td></tr>
+    <tr><td><code>jobs (finished_at DESC) WHERE status='FAILED'</code></td><td>실패 목록 화면·알림 배치</td></tr>
+    <tr><td><code>jobs (worker_id, status)</code></td><td>Worker별 처리 이력·장애 추적</td></tr>
+    <tr><td><code>renditions (content_id, rendition_type)</code></td><td>상세 화면 파일 조회의 핵심 경로</td></tr>
+    <tr><td><code>renditions (storage_zone, path) UNIQUE</code></td><td>경로 중복 기록 방지(멱등 재실행 upsert 기준)</td></tr>
+    <tr><td><code>renditions (checksum)</code></td><td>무결성 대조·중복 파일 탐지</td></tr>
+    <tr><td><code>locks (locked_until)</code></td><td>만료 lease 회수 스캔</td></tr>
+    <tr><td><code>contents (status, created_at DESC)</code></td><td>상태 필터 목록(관리자·CMS 목록 화면)</td></tr>
+  </table>
+
+  <h2>11. 예시 데이터 흐름 — video_001.mov 업로드</h2>
+  <table>
+    <tr><th style="width: 40px;">#</th><th style="width: 150px;">이벤트</th><th>DB 변화</th></tr>
+    <tr><td>1</td><td>업로드 시작</td><td><code>contents</code> INSERT (id=1001, status=UPLOADING)</td></tr>
+    <tr><td>2</td><td>업로드 완료·등록</td><td><code>contents.status</code>=REGISTERED, <code>media_files</code> INSERT (id=5001, temp_path, checksum)</td></tr>
+    <tr><td>3</td><td>워크플로우 시작</td><td><code>workflow_instances</code> INSERT (id=7001, template=VIDEO_INGEST v3), <code>workflow_jobs</code> 7건 INSERT (TM만 READY, 나머지 WAITING), <code>workflow_job_dependencies</code> INSERT, <code>contents.status</code>=PROCESSING</td></tr>
+    <tr><td>4</td><td>TM SUCCESS</td><td><code>media_renditions</code> INSERT (MASTER, zone=MASTER), <code>media_files.temp_path</code> 유지, TM job=SUCCESS + history 2건(READY→RUNNING→SUCCESS), VERIFY→READY</td></tr>
+    <tr><td>5</td><td>VERIFY SUCCESS</td><td><code>media_files.detected_mime</code> 갱신, MA→READY</td></tr>
+    <tr><td>6</td><td>MA SUCCESS</td><td><code>media_files.media_info</code>(jsonb) 저장, <code>contents.media_type</code>=VIDEO, TC→READY</td></tr>
+    <tr><td>7</td><td>TC SUCCESS</td><td><code>media_renditions</code> INSERT (PROXY_VIDEO, zone=PROXY, 720p), CA→READY</td></tr>
+    <tr><td>8</td><td>CA SUCCESS</td><td><code>media_renditions</code> INSERT (THUMBNAIL 1건 + CATALOG N건, timecode_ms 포함), INDEX→READY</td></tr>
+    <tr><td>9</td><td>INDEX SUCCESS</td><td><code>search_index_states</code> upsert (INDEXED, index_version+1), PUBLISH→READY</td></tr>
+    <tr><td>10</td><td>PUBLISH SUCCESS</td><td>필수 작업 전체 SUCCESS 검증 → <code>contents.status</code>=READY, <code>published_at</code>=now(), instance=SUCCESS</td></tr>
+    <tr><td>11</td><td>CLEANUP SUCCESS</td><td>Temp 파일 삭제, <code>media_files.temp_path</code>=NULL</td></tr>
+  </table>
+
+  <h2>12. 운영 시 고려사항</h2>
+  <ul>
+    <li><b>파티셔닝</b>: <code>workflow_job_histories</code>·<code>workflow_job_logs</code>는 월 단위 range 파티셔닝 + 보존 정책(이력 12개월, 로그 90일).</li>
+    <li><b>아카이브</b>: 종결(SUCCESS/FAILED) 후 90일 지난 job은 아카이브 테이블로 이동해 큐 인덱스를 작게 유지.</li>
+    <li><b>모니터링 지표</b>: READY 큐 길이, RUNNING 평균 시간, 실패율, lease 회수 건수 — 대시보드 필수.</li>
+    <li><b>백업</b>: contents / media_renditions는 PITR 대상. Master Storage와 DB의 정합성 점검 배치(주 1회 checksum 대조).</li>
+    <li><b>Laravel 구현</b>: 상태 전이는 단일 서비스 경유, 마이그레이션에 CHECK 제약 포함, jsonb 컬럼은 <code>casts</code>로 매핑.</li>
+  </ul>
+
+  <h2>13. DDL 초안 (설계 검토용 — 발췌)</h2>
+  <pre>CREATE TABLE contents (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  uuid          uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+  title         varchar(500) NOT NULL,
+  description   text,
+  media_type    varchar(10) CHECK (media_type IN ('VIDEO','IMAGE','AUDIO','DOC')),
+  status        varchar(20) NOT NULL DEFAULT 'UPLOADING'
+                CHECK (status IN ('UPLOADING','REGISTERED','PROCESSING','READY','FAILED','ARCHIVED','DELETED')),
+  workflow_version varchar(20),
+  published_at  timestamptz,
+  created_by    bigint NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  deleted_at    timestamptz
+);
+CREATE INDEX idx_contents_status ON contents (status, created_at DESC);
+
+CREATE TABLE workflow_jobs (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  instance_id   bigint NOT NULL REFERENCES workflow_instances(id),
+  content_id    bigint NOT NULL REFERENCES contents(id),
+  job_type      varchar(30) NOT NULL,
+  status        varchar(20) NOT NULL DEFAULT 'WAITING'
+                CHECK (status IN ('WAITING','READY','RUNNING','SUCCESS','FAILED','RETRY','SKIPPED','CANCELED','TIMEOUT')),
+  is_required   boolean NOT NULL DEFAULT true,
+  priority      smallint NOT NULL DEFAULT 100 CHECK (priority BETWEEN 0 AND 1000),
+  cancel_requested_at timestamptz,
+  retry_count   int NOT NULL DEFAULT 0,
+  max_retry     int NOT NULL DEFAULT 3,
+  timeout_sec   int NOT NULL DEFAULT 600,
+  next_attempt_at timestamptz,
+  payload       jsonb,
+  result        jsonb,
+  fail_reason_code varchar(50),
+  worker_id     bigint,
+  started_at    timestamptz,
+  finished_at   timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (instance_id, job_type)
+);
+CREATE INDEX idx_jobs_queue ON workflow_jobs (status, next_attempt_at)
+  WHERE status IN ('READY','RETRY');
+CREATE INDEX idx_jobs_running ON workflow_jobs (started_at) WHERE status = 'RUNNING';
+CREATE INDEX idx_jobs_content ON workflow_jobs (content_id);
+CREATE INDEX idx_jobs_failed ON workflow_jobs (finished_at DESC) WHERE status = 'FAILED';
+
+CREATE TABLE workflow_job_dependencies (
+  job_id            bigint NOT NULL REFERENCES workflow_jobs(id),
+  depends_on_job_id bigint NOT NULL REFERENCES workflow_jobs(id),
+  PRIMARY KEY (job_id, depends_on_job_id),
+  CHECK (job_id &lt;&gt; depends_on_job_id)
+);
+CREATE INDEX idx_dep_reverse ON workflow_job_dependencies (depends_on_job_id);
+
+CREATE TABLE media_renditions (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  content_id    bigint NOT NULL REFERENCES contents(id),
+  media_file_id bigint NOT NULL REFERENCES media_files(id),
+  rendition_type varchar(30) NOT NULL CHECK (rendition_type IN
+    ('MASTER','PROXY_VIDEO','PROXY_IMAGE','PROXY_AUDIO','THUMBNAIL','CATALOG',
+     'PAGE_PREVIEW','DOCUMENT_PREVIEW','WAVEFORM','OCR_TEXT','EXTRACTED_TEXT')),
+  storage_zone  varchar(30) NOT NULL CHECK (storage_zone IN
+    ('TEMP','MASTER','PROXY','THUMBNAIL','CATALOG','DOCUMENT','ARCHIVE')),
+  variant_key   varchar(50) NOT NULL DEFAULT 'default',
+  path          varchar(1000) NOT NULL,
+  file_size     bigint,
+  checksum      varchar(64),
+  mime_type     varchar(100),
+  width int, height int,
+  duration_ms   bigint,
+  page_no       int,
+  timecode_ms   bigint,
+  profile_id    bigint,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (storage_zone, path)
+);
+CREATE INDEX idx_rend_lookup ON media_renditions (content_id, rendition_type);
+
+CREATE TABLE workflow_job_locks (
+  job_id              bigint PRIMARY KEY REFERENCES workflow_jobs(id),
+  locked_by_worker_id bigint NOT NULL REFERENCES workflow_worker_agents(id),
+  locked_at           timestamptz NOT NULL DEFAULT now(),
+  locked_until        timestamptz NOT NULL,
+  heartbeat_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_locks_expiry ON workflow_job_locks (locked_until);</pre>
+  <p class="muted">전체 DDL은 마이그레이션 작성 시 본 명세 §4를 기준으로 전개한다.</p>
+
+  <h2>14. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>Queue &amp; Worker 설계서</b> — 큐 토폴로지, Worker 배치·스케일링, 우선순위 정책</li>
+    <li><b>상태 기계 구현 명세</b> — Laravel JobStateMachine 클래스 + 트리거 SQL 상세</li>
+    <li><b>API 명세서</b> — 콘텐츠/렌디션/작업 조회·재시도 관리자 API</li>
+    <li><b>Laravel 마이그레이션 초안</b> — 본 DDL의 마이그레이션 코드화</li>
+    <li><b>관리자 화면 와이어프레임</b> — 워크플로우 대시보드·처리 상세·실패 목록</li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

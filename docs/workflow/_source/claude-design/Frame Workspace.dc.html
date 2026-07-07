@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-app: oklch(0.982 0.002 265); --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265); --bg-hover: oklch(0.952 0.004 265);
+    --border: oklch(0.918 0.004 265); --border-strong: oklch(0.85 0.006 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-hover: oklch(0.46 0.095 264); --accent-fg: oklch(0.99 0 0); --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+    --ok: oklch(0.62 0.09 155); --ok-bg: oklch(0.95 0.03 155); --ok-fg: oklch(0.44 0.08 155);
+    --warn: oklch(0.72 0.1 75); --warn-bg: oklch(0.96 0.04 82); --warn-fg: oklch(0.5 0.09 62);
+    --danger: oklch(0.57 0.16 25); --danger-bg: oklch(0.96 0.03 25); --danger-fg: oklch(0.51 0.16 25);
+    --shadow-sm: 0 1px 2px oklch(0.2 0.02 265 / 0.06);
+    --shadow-md: 0 4px 16px oklch(0.2 0.02 265 / 0.09), 0 1px 3px oklch(0.2 0.02 265 / 0.06);
+    color-scheme: light;
+  }
+  html[data-theme="dark"] {
+    --bg-app: oklch(0.162 0.004 265); --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265); --bg-hover: oklch(0.278 0.008 265);
+    --border: oklch(0.29 0.007 265); --border-strong: oklch(0.38 0.01 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-hover: oklch(0.74 0.11 264); --accent-fg: oklch(0.16 0.02 264); --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+    --ok: oklch(0.7 0.12 155); --ok-bg: oklch(0.31 0.05 155); --ok-fg: oklch(0.84 0.1 155);
+    --warn: oklch(0.8 0.12 82); --warn-bg: oklch(0.33 0.05 78); --warn-fg: oklch(0.88 0.1 85);
+    --danger: oklch(0.66 0.17 25); --danger-bg: oklch(0.33 0.07 25); --danger-fg: oklch(0.84 0.13 25);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
+    --shadow-md: 0 4px 16px oklch(0 0 0 / 0.4), 0 1px 3px oklch(0 0 0 / 0.3);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [data-ws] *::-webkit-scrollbar { width: 11px; height: 11px; }
+  [data-ws] *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+  [data-ws] *::-webkit-scrollbar-track { background: transparent; }
+  [data-ws] ::placeholder { color: var(--text-3); }
+</style>
+</helmet>
+<div data-ws style="min-height: 100vh; background: var(--bg-app); color: var(--text-1); font-family: 'IBM Plex Sans KR', system-ui, sans-serif; font-size: 14px; letter-spacing: -0.006em; -webkit-font-smoothing: antialiased;">
+
+  <dc-import name="AppShell" brand="{{ brand }}" brand-glyph="layers" section="워크스페이스" items="{{ navItems }}" active="{{ activeSection }}" on-navigate="{{ onNavigate }}" page-title="{{ pageTitle }}" action-label="업로드" on-action="{{ openUpload }}" theme="{{ theme }}" on-toggle-theme="{{ onToggleTheme }}" on-search="{{ onSearch }}" search-placeholder="에셋, 태그, 컬렉션 검색…" user-name="{{ userName }}" user-role="{{ userRole }}" hint-size="100%,100%">
+
+    <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width: 1200px; margin: 0 auto; padding: 30px 34px 64px;">
+        <div style="margin-bottom: 24px;">
+          <div style="font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 5px;">{{ greeting }}</div>
+          <div style="font-size: 14px; color: var(--text-2);">{{ todayLabel }} · 워크스페이스에 {{ statTotal }}개의 자산이 있습니다</div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 26px;">
+          <dc-import name="StatCard" label="총 에셋" value="{{ statTotal }}" glyph="image" delta="{{ statTotalDelta }}" sub="이번 주" hint-size="100%,116px"></dc-import>
+          <dc-import name="StatCard" label="이번 달 업로드" value="{{ statMonth }}" glyph="upload" delta="{{ statMonthDelta }}" sub="6월" hint-size="100%,116px"></dc-import>
+          <dc-import name="StatCard" label="검토 대기" value="{{ statReview }}" glyph="clock" delta="{{ statReviewDelta }}" delta-up="false" sub="확인 필요" hint-size="100%,116px"></dc-import>
+          <dc-import name="StatCard" label="게시됨" value="{{ statPublished }}" glyph="checkCircle" delta="{{ statPubDelta }}" sub="공개 중" hint-size="100%,116px"></dc-import>
+        </div>
+        <div style="display: grid; grid-template-columns: 1.7fr 1fr; gap: 20px; align-items: start;">
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+              <div style="font-size: 16px; font-weight: 700; letter-spacing: -0.01em;">최근 업로드</div>
+              <span onClick="{{ goLibrary }}" style="font-size: 13px; color: var(--accent-text); cursor: pointer; font-weight: 500;">전체 보기 →</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
+              <sc-for list="{{ dashRecent }}" as="a" hint-placeholder-count="6">
+                <dc-import name="AssetCard" dc-props="{{ a.card }}" hint-size="100%,200px"></dc-import>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 18px;">
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 18px 10px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                <div style="font-size: 15px; font-weight: 700;">검토 대기</div>
+                <span onClick="{{ goReview }}" style="font-size: 12.5px; color: var(--accent-text); cursor: pointer;">{{ statReview }}건 →</span>
+              </div>
+              <sc-for list="{{ dashReview }}" as="r" hint-placeholder-count="3">
+                <div onClick="{{ r.onOpen }}" style="display: flex; align-items: center; gap: 11px; padding: 11px 0; border-bottom: 1px solid var(--border); cursor: pointer;">
+                  <span style="width: 42px; height: 33px; border-radius: 7px; flex-shrink: 0; {{ r.thumb }}"></span>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 12.5px; font-weight: 500; font-family: 'IBM Plex Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.name }}</div>
+                    <div style="font-size: 11.5px; color: var(--text-3);">{{ r.owner }} · {{ r.up }}</div>
+                  </div>
+                  <span style="{{ r.avStyle }}">{{ r.avInitial }}</span>
+                </div>
+              </sc-for>
+              <sc-if value="{{ dashReviewEmpty }}"><div style="padding: 18px 0; text-align: center; font-size: 12.5px; color: var(--text-3);">검토할 항목이 없습니다</div></sc-if>
+            </div>
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;"><span style="display: flex; color: var(--text-2);"><ds-icon glyph="hardDrive" size="17"></ds-icon></span><div style="font-size: 15px; font-weight: 700;">스토리지</div></div>
+              <div style="height: 8px; border-radius: 20px; background: var(--bg-subtle); overflow: hidden; margin-bottom: 10px;"><div style="height: 100%; width: {{ storagePct }}%; background: var(--accent); border-radius: 20px;"></div></div>
+              <div style="display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-3);"><span>{{ storageUsed }} 사용</span><span>전체 {{ storageTotal }}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLibrary }}">
+      <div style="max-width: 1320px; margin: 0 auto; padding: 26px 34px 64px;">
+        <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; flex-wrap: wrap;">
+          <div>
+            <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">{{ pageTitle }}</div>
+            <div style="font-size: 13.5px; color: var(--text-2); margin-top: 3px;">{{ libCount }}개의 자산 · {{ libRangeLabel }} 표시</div>
+          </div>
+          <dc-import name="Button" variant="primary" glyph="upload" label="업로드" on-click="{{ openUpload }}" hint-size="104px,38px"></dc-import>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; flex-wrap: wrap;">
+          <dc-import name="Tabs" variant="segment" tabs="{{ libTypeTabs }}" active="{{ libType }}" on-change="{{ libSetType }}" hint-size="220px,38px"></dc-import>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 150px;"><dc-import name="Select" value="{{ libStatus }}" options="{{ statusOptions }}" on-change="{{ libSetStatus }}" hint-size="150px,42px"></dc-import></div>
+            <div style="width: 140px;"><dc-import name="Select" value="{{ libSort }}" options="{{ sortOptions }}" on-change="{{ libSetSort }}" hint-size="140px,42px"></dc-import></div>
+            <div style="display: flex; gap: 3px; padding: 3px; border-radius: 10px; background: var(--bg-subtle); border: 1px solid var(--border);">
+              <button onClick="{{ setViewGrid }}" title="그리드" style="{{ gridBtnStyle }}"><ds-icon glyph="grid" size="17"></ds-icon></button>
+              <button onClick="{{ setViewList }}" title="리스트" style="{{ listBtnStyle }}"><ds-icon glyph="list" size="17"></ds-icon></button>
+            </div>
+          </div>
+        </div>
+        <sc-if value="{{ hasChips }}">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+            <sc-for list="{{ libChips }}" as="c" hint-placeholder-count="2">
+              <span style="display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 12px; border-radius: 8px; background: var(--bg-subtle); border: 1px solid var(--border); font-size: 12.5px; color: var(--text-1);">{{ c.label }}<button onClick="{{ c.onClear }}" style="width: 18px; height: 18px; border-radius: 5px; border: none; background: transparent; color: var(--text-3); cursor: pointer; display: grid; place-items: center;" style-hover="background: var(--bg-hover); color: var(--text-1);"><ds-icon glyph="x" size="13"></ds-icon></button></span>
+            </sc-for>
+            <button onClick="{{ clearFilters }}" style="height: 30px; padding: 0 10px; border-radius: 8px; border: none; background: transparent; color: var(--text-3); font-size: 12.5px; cursor: pointer; font-family: inherit;" style-hover="color: var(--text-1);">모두 지우기</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ hasSel }}">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 11px 16px; margin-bottom: 16px; border-radius: 11px; background: var(--accent-subtle); border: 1px solid color-mix(in oklab, var(--accent) 25%, transparent);">
+            <span style="font-size: 13.5px; font-weight: 600; color: var(--accent-text);">{{ selCount }}개 선택됨</span>
+            <button onClick="{{ selectAllVisible }}" style="height: 30px; padding: 0 10px; border-radius: 8px; border: none; background: transparent; color: var(--accent-text); font-size: 12.5px; font-weight: 500; cursor: pointer; font-family: inherit;" style-hover="background: color-mix(in oklab, var(--accent) 14%, transparent);">현재 페이지 전체</button>
+            <div style="flex: 1;"></div>
+            <dc-import name="Button" variant="secondary" size="sm" glyph="checkCircle" label="게시" on-click="{{ bulkPublish }}" hint-size="82px,32px"></dc-import>
+            <dc-import name="Button" variant="danger" size="sm" glyph="trash" label="삭제" on-click="{{ bulkDelete }}" hint-size="82px,32px"></dc-import>
+            <dc-import name="Button" variant="ghost" size="sm" label="선택 해제" on-click="{{ clearSel }}" hint-size="82px,32px"></dc-import>
+          </div>
+        </sc-if>
+        <sc-if value="{{ libViewGrid }}">
+          <sc-if value="{{ libHasResults }}">
+            <div style="display: grid; grid-template-columns: {{ libGridCols }}; gap: 16px;">
+              <sc-for list="{{ libGrid }}" as="a" hint-placeholder-count="10">
+                <dc-import name="AssetCard" dc-props="{{ a.card }}" hint-size="100%,210px"></dc-import>
+              </sc-for>
+            </div>
+          </sc-if>
+        </sc-if>
+        <sc-if value="{{ libViewList }}">
+          <sc-if value="{{ libHasResults }}">
+            <dc-import name="DataTable" columns="{{ libCols }}" rows="{{ libRows }}" selectable="false" on-row-click="{{ openDetailRow }}" on-action="{{ openDetailRow }}" hint-size="100%,420px"></dc-import>
+          </sc-if>
+        </sc-if>
+        <sc-if value="{{ libEmpty }}">
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 70px 20px; text-align: center; border: 1px dashed var(--border-strong); border-radius: 14px; background: var(--bg-surface);">
+            <div style="width: 52px; height: 52px; border-radius: 14px; background: var(--bg-subtle); color: var(--text-3); display: grid; place-items: center; margin-bottom: 14px;"><ds-icon glyph="search" size="24"></ds-icon></div>
+            <div style="font-size: 15px; font-weight: 600; margin-bottom: 5px;">결과가 없습니다</div>
+            <div style="font-size: 13px; color: var(--text-3); margin-bottom: 16px;">필터를 조정하거나 검색어를 변경해 보세요.</div>
+            <dc-import name="Button" variant="secondary" size="sm" label="필터 초기화" on-click="{{ clearFilters }}" hint-size="100px,32px"></dc-import>
+          </div>
+        </sc-if>
+        <sc-if value="{{ libShowPager }}">
+          <div style="display: flex; justify-content: center; margin-top: 26px;">
+            <dc-import name="Pagination" page="{{ libPage }}" total="{{ libTotalPages }}" on-change="{{ setLibPage }}" hint-size="360px,34px"></dc-import>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCollections }}">
+      <div style="max-width: 1200px; margin: 0 auto; padding: 30px 34px 64px;">
+        <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px;">
+          <div>
+            <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">컬렉션</div>
+            <div style="font-size: 13.5px; color: var(--text-2); margin-top: 3px;">{{ collectionTotal }}개의 컬렉션</div>
+          </div>
+          <dc-import name="Button" variant="secondary" glyph="plus" label="새 컬렉션" on-click="{{ newCollection }}" hint-size="118px,38px"></dc-import>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(278px, 1fr)); gap: 16px;">
+          <sc-for list="{{ collectionCards }}" as="c" hint-placeholder-count="4">
+            <div onClick="{{ c.onOpen }}" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; cursor: pointer; transition: box-shadow .15s, border-color .15s;" style-hover="border-color: var(--border-strong); box-shadow: var(--shadow-md);">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; height: 128px;">
+                <sc-for list="{{ c.thumbs }}" as="t" hint-placeholder-count="4"><span style="display: block; {{ t }}"></span></sc-for>
+              </div>
+              <div style="padding: 14px 16px 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;"><span style="display: flex; color: var(--text-2);"><ds-icon glyph="folder" size="16"></ds-icon></span><div style="font-size: 15px; font-weight: 600;">{{ c.name }}</div></div>
+                <div style="font-size: 12.5px; color: var(--text-3); margin-bottom: 14px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.desc }}</div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span style="font-size: 12.5px; color: var(--text-2); font-weight: 500;">{{ c.count }}개 · 게시 {{ c.pub }}</span>
+                  <div style="display: flex;">
+                    <sc-for list="{{ c.owners }}" as="o" hint-placeholder-count="3"><span style="{{ o.style }} margin-left: -6px; border: 2px solid var(--bg-surface);">{{ o.initial }}</span></sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isReview }}">
+      <div style="max-width: 1060px; margin: 0 auto; padding: 30px 34px 64px;">
+        <div style="margin-bottom: 22px;">
+          <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">검토 대기</div>
+          <div style="font-size: 13.5px; color: var(--text-2); margin-top: 3px;">{{ reviewCount }}건의 항목이 검토를 기다리고 있습니다</div>
+        </div>
+        <sc-if value="{{ reviewEmpty }}">
+          <div style="display: flex; flex-direction: column; align-items: center; padding: 70px 20px; text-align: center; border: 1px dashed var(--border-strong); border-radius: 14px; background: var(--bg-surface);">
+            <div style="width: 52px; height: 52px; border-radius: 14px; background: var(--ok-bg); color: var(--ok-fg); display: grid; place-items: center; margin-bottom: 14px;"><ds-icon glyph="checkCircle" size="24"></ds-icon></div>
+            <div style="font-size: 15px; font-weight: 600; margin-bottom: 5px;">모두 검토했습니다</div>
+            <div style="font-size: 13px; color: var(--text-3);">검토 대기 중인 항목이 없습니다.</div>
+          </div>
+        </sc-if>
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <sc-for list="{{ reviewItems }}" as="r" hint-placeholder-count="4">
+            <div style="display: flex; gap: 16px; padding: 14px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; align-items: center;">
+              <div onClick="{{ r.onOpen }}" style="position: relative; width: 148px; height: 94px; border-radius: 10px; overflow: hidden; flex-shrink: 0; cursor: pointer; {{ r.thumb }}">
+                <sc-if value="{{ r.isVideo }}"><span style="position: absolute; inset: 0; display: grid; place-items: center; color: #fff;"><span style="width: 34px; height: 34px; border-radius: 50%; background: oklch(0.15 0.02 265 / 0.5); display: grid; place-items: center;"><ds-icon glyph="play" size="15" fill="currentColor"></ds-icon></span></span></sc-if>
+              </div>
+              <div onClick="{{ r.onOpen }}" style="flex: 1; min-width: 0; cursor: pointer;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;"><span style="font-size: 14px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.name }}</span><span style="display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: var(--warn-bg); color: var(--warn-fg); flex-shrink: 0;">검토 중</span></div>
+                <div style="font-size: 12.5px; color: var(--text-3); margin-bottom: 9px;">{{ r.typeLabel }} · {{ r.meta }} · {{ r.coll }}</div>
+                <div style="display: flex; align-items: center; gap: 8px;"><span style="{{ r.av.style }}">{{ r.av.initial }}</span><span style="font-size: 12.5px; color: var(--text-2);">{{ r.owner }} · {{ r.up }}</span></div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;">
+                <dc-import name="Button" variant="primary" size="sm" glyph="check" label="승인" on-click="{{ r.onApprove }}" hint-size="92px,32px"></dc-import>
+                <dc-import name="Button" variant="danger" size="sm" glyph="x" label="반려" on-click="{{ r.onReject }}" hint-size="92px,32px"></dc-import>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDetail }}">
+      <div style="max-width: 1240px; margin: 0 auto; padding: 22px 34px 64px;">
+        <div style="margin-bottom: 16px;"><dc-import name="Breadcrumb" items="{{ crumbItems }}" hint-size="100%,24px"></dc-import></div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 22px; flex-wrap: wrap;">
+          <button onClick="{{ detBack }}" style="width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-2); cursor: pointer; display: grid; place-items: center; flex-shrink: 0;" style-hover="background: var(--bg-hover); color: var(--text-1);"><ds-icon glyph="arrowLeft" size="18"></ds-icon></button>
+          <div style="min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px;">
+            <div style="font-size: 19px; font-weight: 700; letter-spacing: -0.02em; font-family: 'IBM Plex Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ detName }}</div>
+            <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 20px; flex-shrink: 0; background: {{ detStatusBg }}; color: {{ detStatusFg }};"><span style="width: 5px; height: 5px; border-radius: 50%; background: {{ detStatusDot }};"></span>{{ detStatusKo }}</span>
+          </div>
+          <sc-if value="{{ detEditing }}">
+            <dc-import name="Button" variant="ghost" label="취소" on-click="{{ cancelEdit }}" hint-size="72px,38px"></dc-import>
+            <dc-import name="Button" variant="primary" glyph="check" label="저장" on-click="{{ saveEdit }}" hint-size="92px,38px"></dc-import>
+          </sc-if>
+          <sc-if value="{{ detViewing }}">
+            <dc-import name="Button" variant="secondary" glyph="edit" label="편집" on-click="{{ startEdit }}" hint-size="86px,38px"></dc-import>
+            <dc-import name="Button" variant="secondary" glyph="checkCircle" label="{{ detPublishLabel }}" on-click="{{ detPublishAction }}" hint-size="116px,38px"></dc-import>
+            <dc-import name="Button" variant="danger" icon-only="true" glyph="trash" on-click="{{ detDelete }}" hint-size="38px,38px"></dc-import>
+          </sc-if>
+        </div>
+        <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 22px; align-items: start; margin-bottom: 26px;">
+          <div>
+            <div style="border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--bg-surface);">
+              <div style="aspect-ratio: 16/10; position: relative; {{ detThumb }}">
+                <sc-if value="{{ detIsVideo }}">
+                  <div style="position: absolute; inset: 0; display: grid; place-items: center;"><span style="width: 60px; height: 60px; border-radius: 50%; background: oklch(0.15 0.02 265 / 0.5); backdrop-filter: blur(4px); display: grid; place-items: center; color: #fff;"><ds-icon glyph="play" size="26" fill="currentColor"></ds-icon></span></div>
+                  <div style="position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px;"><div style="flex: 1; height: 4px; border-radius: 20px; background: oklch(1 0 0 / 0.3); overflow: hidden;"><div style="width: 34%; height: 100%; background: #fff; border-radius: 20px;"></div></div><span style="font-size: 11px; font-weight: 600; color: #fff; font-family: 'IBM Plex Mono', monospace;">{{ detDur }}</span></div>
+                </sc-if>
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px;">
+              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px;"><div style="font-size: 11px; color: var(--text-3); margin-bottom: 3px;">유형</div><div style="font-size: 13px; font-weight: 600;">{{ detTypeLabel }}</div></div>
+              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px;"><div style="font-size: 11px; color: var(--text-3); margin-bottom: 3px;">포맷</div><div style="font-size: 13px; font-weight: 600;">{{ detFormat }}</div></div>
+              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px;"><div style="font-size: 11px; color: var(--text-3); margin-bottom: 3px;">크기</div><div style="font-size: 13px; font-weight: 600;">{{ detSize }}</div></div>
+              <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px;"><div style="font-size: 11px; color: var(--text-3); margin-bottom: 3px;">해상도</div><div style="font-size: 13px; font-weight: 600;">{{ detDim }}</div></div>
+            </div>
+          </div>
+          <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px;">
+            <div style="font-size: 13px; font-weight: 700; margin-bottom: 16px;">정보</div>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;"><span style="font-size: 12.5px; color: var(--text-3);">담당자</span><span style="display: inline-flex; align-items: center; gap: 7px;"><span style="{{ detOwnerAv.style }}">{{ detOwnerAv.initial }}</span><span style="font-size: 13px; font-weight: 500;">{{ detOwner }}</span></span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;"><span style="font-size: 12.5px; color: var(--text-3);">컬렉션</span><span style="font-size: 13px; font-weight: 500; text-align: right;">{{ detColl }}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;"><span style="font-size: 12.5px; color: var(--text-3);">업로드</span><span style="font-size: 13px; font-weight: 500;">{{ detUp }}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;"><span style="font-size: 12.5px; color: var(--text-3);">촬영일</span><span style="font-size: 13px; font-weight: 500; font-family: 'IBM Plex Mono', monospace;">{{ detShot }}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;"><span style="font-size: 12.5px; color: var(--text-3);">협업자</span><div style="display: flex;"><sc-for list="{{ detCollabAvs }}" as="o" hint-placeholder-count="2"><span style="{{ o.style }} margin-left: -6px; border: 2px solid var(--bg-surface);">{{ o.initial }}</span></sc-for></div></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-bottom: 18px;"><dc-import name="Tabs" variant="underline" tabs="{{ detailTabItems }}" active="{{ detailTab }}" on-change="{{ setDetailTab }}" hint-size="100%,42px"></dc-import></div>
+
+        <sc-if value="{{ detTabMeta }}">
+          <sc-if value="{{ detViewing }}">
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 6px 20px; max-width: 720px;">
+              <sc-for list="{{ metaFields }}" as="f" hint-placeholder-count="8"><dc-import name="MetaField" dc-props="{{ f.props }}" hint-size="100%,54px"></dc-import></sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ detEditing }}">
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; max-width: 720px; display: flex; flex-direction: column; gap: 18px;">
+              <dc-import name="Input" label="제목" value="{{ eName }}" on-change="{{ setName }}" hint-size="100%,74px"></dc-import>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <dc-import name="Select" label="카테고리" value="{{ eCat }}" options="{{ categoryNames }}" on-change="{{ setCat }}" hint-size="100%,74px"></dc-import>
+                <dc-import name="Select" label="컬렉션" value="{{ eColl }}" options="{{ collectionNames }}" on-change="{{ setColl }}" hint-size="100%,74px"></dc-import>
+              </div>
+              <dc-import name="MultiSelect" label="사용 채널" values="{{ eChannels }}" options="{{ channelNames }}" on-change="{{ setChannels }}" hint-size="100%,74px"></dc-import>
+              <dc-import name="MultiSelect" label="협업자" with-avatars="true" values="{{ eCollab }}" options="{{ userNames }}" on-change="{{ setCollab }}" hint-size="100%,74px"></dc-import>
+              <dc-import name="MultiSelect" label="태그" values="{{ eTags }}" options="{{ tagPool }}" on-change="{{ setTags }}" hint-size="100%,74px"></dc-import>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start;">
+                <dc-import name="Input" label="촬영일" value="{{ eShot }}" placeholder="YYYY-MM-DD" on-change="{{ setShot }}" hint-size="100%,74px"></dc-import>
+                <div><div style="font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 10px;">품질 평점</div><dc-import name="Rating" value="{{ eRating }}" size="22" on-change="{{ setRating }}" hint-size="140px,28px"></dc-import></div>
+              </div>
+              <dc-import name="Textarea" label="설명" value="{{ eDesc }}" rows="3" on-change="{{ setDesc }}" hint-size="100%,110px"></dc-import>
+              <dc-import name="Toggle" label="승인 완료" checked="{{ eApproved }}" on-change="{{ setApproved }}" hint-size="100%,24px"></dc-import>
+            </div>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ detTabVersions }}">
+          <div style="border: 1px solid var(--border); border-radius: 14px; overflow: hidden; max-width: 720px;">
+            <sc-for list="{{ versions }}" as="v" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--bg-surface);">
+                <span style="width: 40px; height: 40px; border-radius: 9px; background: var(--bg-subtle); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--text-2); font-family: 'IBM Plex Mono', monospace;">{{ v.label }}</span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="display: flex; align-items: center; gap: 8px;"><span style="font-size: 13.5px; font-weight: 600;">{{ v.title }}</span><sc-if value="{{ v.cur }}"><span style="font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 20px; background: var(--accent-subtle); color: var(--accent-text);">현재</span></sc-if></div>
+                  <div style="font-size: 12px; color: var(--text-3); margin-top: 2px;">{{ v.by }} · {{ v.time }} · {{ v.size }}</div>
+                </div>
+                <sc-if value="{{ v.canRestore }}"><dc-import name="Button" variant="ghost" size="sm" label="복원" on-click="{{ v.onRestore }}" hint-size="64px,32px"></dc-import></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ detTabActivity }}">
+          <div style="max-width: 720px; display: flex; flex-direction: column; gap: 2px;">
+            <sc-for list="{{ activity }}" as="ev" hint-placeholder-count="4">
+              <div style="display: flex; gap: 13px; padding: 13px 4px;">
+                <span style="width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0; display: grid; place-items: center; background: {{ ev.bg }}; color: {{ ev.fg }};"><ds-icon glyph="{{ ev.icon }}" size="15"></ds-icon></span>
+                <div style="flex: 1; min-width: 0; padding-top: 2px;"><div style="font-size: 13.5px; color: var(--text-1); line-height: 1.5;">{{ ev.text }}</div><div style="font-size: 11.5px; color: var(--text-3); margin-top: 2px;">{{ ev.time }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSettings }}">
+      <div style="max-width: 900px; margin: 0 auto; padding: 30px 34px 64px;">
+        <div style="margin-bottom: 20px;"><div style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">설정</div></div>
+        <div style="margin-bottom: 24px;"><dc-import name="Tabs" variant="segment" tabs="{{ settingsTabItems }}" active="{{ settingsTab }}" on-change="{{ setSettingsTab }}" hint-size="320px,38px"></dc-import></div>
+
+        <sc-if value="{{ setIsProfile }}">
+          <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; max-width: 620px;">
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--border);">
+              <span style="{{ pfAvatar.style }}">{{ pfAvatar.initial }}</span>
+              <div style="flex: 1;"><div style="font-size: 16px; font-weight: 700;">{{ pfName }}</div><div style="font-size: 13px; color: var(--text-3);">{{ pfEmail }}</div></div>
+              <dc-import name="Button" variant="secondary" size="sm" glyph="image" label="사진 변경" on-click="{{ settingsSoon }}" hint-size="110px,32px"></dc-import>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px;">
+              <dc-import name="Input" label="이름" value="{{ pfName }}" on-change="{{ setPfName }}" hint-size="100%,74px"></dc-import>
+              <dc-import name="Input" label="이메일" value="{{ pfEmail }}" type="email" on-change="{{ setPfEmail }}" hint-size="100%,74px"></dc-import>
+              <dc-import name="Select" label="역할" value="{{ pfRole }}" options="{{ roleOptions }}" on-change="{{ setPfRole }}" hint-size="100%,74px"></dc-import>
+              <dc-import name="Select" label="언어" value="{{ pfLang }}" options="{{ langOptions }}" on-change="{{ setPfLang }}" hint-size="100%,74px"></dc-import>
+            </div>
+            <div style="display: flex; justify-content: flex-end;"><dc-import name="Button" variant="primary" label="변경사항 저장" on-click="{{ saveProfile }}" hint-size="130px,38px"></dc-import></div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ setIsTeam }}">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+            <div style="font-size: 13.5px; color: var(--text-2);">{{ teamCount }}명의 멤버</div>
+            <dc-import name="Button" variant="primary" size="sm" glyph="plus" label="멤버 초대" on-click="{{ inviteMember }}" hint-size="112px,32px"></dc-import>
+          </div>
+          <dc-import name="DataTable" columns="{{ teamCols }}" rows="{{ teamRows }}" selectable="false" hint-size="100%,360px"></dc-import>
+        </sc-if>
+
+        <sc-if value="{{ setIsNotif }}">
+          <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 8px 22px; max-width: 620px;">
+            <sc-for list="{{ notifRows }}" as="n" hint-placeholder-count="5">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; {{ n.border }}">
+                <div><div style="font-size: 14px; font-weight: 600;">{{ n.title }}</div><div style="font-size: 12.5px; color: var(--text-3); margin-top: 2px;">{{ n.desc }}</div></div>
+                <dc-import name="Toggle" checked="{{ n.checked }}" on-change="{{ n.onChange }}" hint-size="42px,24px"></dc-import>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ setIsStorage }}">
+          <div style="max-width: 620px;">
+            <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;"><div style="font-size: 14px; font-weight: 700;">스토리지 사용량</div><span style="font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; background: var(--accent-subtle); color: var(--accent-text);">Pro 플랜</span></div>
+              <div style="height: 10px; border-radius: 20px; background: var(--bg-subtle); overflow: hidden; margin-bottom: 10px;"><div style="height: 100%; width: {{ storPct }}%; background: var(--accent); border-radius: 20px;"></div></div>
+              <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: var(--text-2); font-weight: 500;">{{ storUsed }} 사용 중</span><span style="color: var(--text-3);">전체 {{ storTotal }}</span></div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+              <sc-for list="{{ storStats }}" as="st" hint-placeholder-count="3"><dc-import name="StatCard" dc-props="{{ st.props }}" hint-size="100%,104px"></dc-import></sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ screensSentinel }}" hint-placeholder-val="{{ false }}"></sc-if>
+
+  </dc-import>
+
+  <dc-import name="Drawer" open="{{ uploadOpen }}" title="새 미디어 업로드" confirm-label="업로드 시작" cancel-label="취소" on-close="{{ closeUpload }}" on-confirm="{{ submitUpload }}" hint-size="0,0">
+    <div style="display: flex; flex-direction: column; gap: 18px;">
+      <div style="border: 1.5px dashed var(--border-strong); border-radius: 12px; padding: 28px 20px; text-align: center; background: var(--bg-subtle);">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: var(--accent-subtle); color: var(--accent-text); display: grid; place-items: center; margin: 0 auto 12px;"><ds-icon glyph="upload" size="20"></ds-icon></div>
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">파일을 드래그하세요</div>
+        <div style="font-size: 12.5px; color: var(--text-3);">또는 클릭하여 찾아보기 · 최대 2GB</div>
+      </div>
+      <dc-import name="Input" label="제목" required="true" value="{{ upTitle }}" placeholder="미디어 제목" on-change="{{ upSetTitle }}" hint-size="100%,74px"></dc-import>
+      <dc-import name="Select" label="컬렉션" value="{{ upColl }}" options="{{ collectionNames }}" on-change="{{ upSetColl }}" hint-size="100%,74px"></dc-import>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <dc-import name="Select" label="유형" value="{{ upType }}" options="{{ typeNames }}" on-change="{{ upSetType }}" hint-size="100%,74px"></dc-import>
+        <dc-import name="Select" label="카테고리" value="{{ upCat }}" options="{{ categoryNames }}" on-change="{{ upSetCat }}" hint-size="100%,74px"></dc-import>
+      </div>
+      <dc-import name="MultiSelect" label="사용 채널" values="{{ upChannels }}" options="{{ channelNames }}" on-change="{{ upSetChannels }}" hint-size="100%,74px"></dc-import>
+      <dc-import name="Toggle" label="업로드 후 검토 요청" checked="{{ upReview }}" on-change="{{ upSetReview }}" hint-size="100%,24px"></dc-import>
+    </div>
+  </dc-import>
+
+  <dc-import name="Modal" open="{{ deleteOpen }}" tone="danger" glyph="trash" title="{{ deleteTitle }}" body="{{ deleteBody }}" confirm-label="삭제" cancel-label="취소" on-close="{{ closeDelete }}" on-confirm="{{ confirmDelete }}" hint-size="0,0"></dc-import>
+
+  <dc-import name="Toast" open="{{ toastOpen }}" tone="{{ toastTone }}" message="{{ toastMsg }}" inline="false" on-close="{{ closeToast }}" hint-size="0,0"></dc-import>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1280, &quot;height&quot;: 860}, &quot;defaultTheme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;default&quot;: &quot;light&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;워크스페이스&quot;}, &quot;sidebarBrand&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;Frame&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;워크스페이스&quot;}, &quot;denseGrid&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;라이브러리&quot;}}">
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = this.load(); }
+
+  // ---------- persistence ----------
+  load() {
+    const def = {
+      theme: (this.props && this.props.defaultTheme) || 'light', screen: 'dashboard', detailId: null,
+      q: '', typeFilter: 'all', statusFilter: 'all', collectionFilter: null, sort: 'recent', view: 'grid', page: 1,
+      sel: [], detailTab: 'meta', editing: false, draft: null, settingsTab: 'profile',
+      uploadOpen: false, up: null, deleteOpen: false, deleteTarget: null, toast: null,
+      assets: this.seedAssets(), collections: this.seedCollections(),
+      prefs: { name: '김서연', email: 'soyeon@frame.io', role: '관리자', notifEmail: true, notifReview: true, notifComment: false, notifWeekly: true, autoTag: true, lang: '한국어' },
+    };
+    try {
+      const raw = localStorage.getItem('frame_ws_v1');
+      if (raw) {
+        const s = JSON.parse(raw);
+        return Object.assign(def, {
+          assets: (s.assets && s.assets.length) ? s.assets : def.assets,
+          collections: (s.collections && s.collections.length) ? s.collections : def.collections,
+          prefs: Object.assign(def.prefs, s.prefs || {}),
+          theme: s.theme || def.theme,
+        });
+      }
+    } catch (e) {}
+    return def;
+  }
+  persist() { try { localStorage.setItem('frame_ws_v1', JSON.stringify({ assets: this.state.assets, collections: this.state.collections, prefs: this.state.prefs, theme: this.state.theme })); } catch (e) {} }
+
+  componentDidMount() { this.applyTheme(); }
+  componentDidUpdate(pp, ps) { if (!ps || ps.theme !== this.state.theme) this.applyTheme(); }
+  applyTheme() { try { document.documentElement.dataset.theme = this.state.theme; } catch (e) {} }
+
+  // ---------- seed data ----------
+  seedAssets() {
+    return [
+      { id: 'a1', name: 'sunset_coast_4k.mp4', type: 'video', size: '248 MB', dim: '3840×2160', dur: '01:24', status: 'published', coll: 'c1', cat: '브랜드', channels: ['웹', '소셜'], owner: '김서연', collab: ['이준호', '박민지'], shot: '2026-06-25', tags: ['드론', '해안', '여름'], rating: 5, approved: true, up: '2일 전', upDate: '2026-06-30', tone: 0.68 },
+      { id: 'a2', name: 'brand_hero_02.jpg', type: 'image', size: '8.4 MB', dim: '6000×4000', dur: '', status: 'review', coll: 'c1', cat: '브랜드', channels: ['웹'], owner: '이준호', collab: ['김서연'], shot: '2026-06-28', tags: ['히어로', '브랜드'], rating: 4, approved: false, up: '5시간 전', upDate: '2026-07-02', tone: 0.6 },
+      { id: 'a3', name: 'product_launch.png', type: 'image', size: '3.1 MB', dim: '2400×1600', dur: '', status: 'published', coll: 'c2', cat: '제품', channels: ['웹', '이메일'], owner: '김서연', collab: [], shot: '2026-06-20', tags: ['제품', '런칭'], rating: 5, approved: true, up: '1주 전', upDate: '2026-06-25', tone: 0.82 },
+      { id: 'a4', name: 'promo_teaser.mp4', type: 'video', size: '96 MB', dim: '1920×1080', dur: '00:32', status: 'draft', coll: 'c4', cat: '이벤트', channels: ['소셜'], owner: '박민지', collab: ['정태윤'], shot: '2026-06-30', tags: ['프로모', '티저'], rating: 3, approved: false, up: '어제', upDate: '2026-07-01', tone: 0.48 },
+      { id: 'a5', name: 'packaging_flat.jpg', type: 'image', size: '12.2 MB', dim: '5000×5000', dur: '', status: 'published', coll: 'c2', cat: '제품', channels: ['인쇄', '웹'], owner: '정태윤', collab: [], shot: '2026-06-18', tags: ['패키지', '플랫레이'], rating: 4, approved: true, up: '2주 전', upDate: '2026-06-18', tone: 0.75 },
+      { id: 'a6', name: 'keynote_stage.jpg', type: 'image', size: '9.8 MB', dim: '6000×4000', dur: '', status: 'review', coll: 'c3', cat: '이벤트', channels: ['웹', '소셜'], owner: '최유진', collab: ['김서연'], shot: '2026-06-27', tags: ['키노트', '무대'], rating: 4, approved: false, up: '3일 전', upDate: '2026-06-29', tone: 0.55 },
+      { id: 'a7', name: 'teaser_vertical.mp4', type: 'video', size: '54 MB', dim: '1080×1920', dur: '00:15', status: 'published', coll: 'c4', cat: '브랜드', channels: ['소셜'], owner: '이준호', collab: [], shot: '2026-06-22', tags: ['세로', '소셜'], rating: 4, approved: true, up: '6일 전', upDate: '2026-06-26', tone: 0.52 },
+      { id: 'a8', name: 'model_portrait.jpg', type: 'image', size: '6.7 MB', dim: '4000×6000', dur: '', status: 'published', coll: 'c1', cat: '브랜드', channels: ['웹', '인쇄'], owner: '김서연', collab: ['최유진'], shot: '2026-06-19', tags: ['모델', '포트레이트'], rating: 5, approved: true, up: '1주 전', upDate: '2026-06-24', tone: 0.7 },
+      { id: 'a9', name: 'event_recap.mp4', type: 'video', size: '312 MB', dim: '3840×2160', dur: '02:48', status: 'review', coll: 'c3', cat: '이벤트', channels: ['웹'], owner: '박민지', collab: ['이준호'], shot: '2026-06-26', tags: ['이벤트', '리캡'], rating: 4, approved: false, up: '4일 전', upDate: '2026-06-28', tone: 0.44 },
+      { id: 'a10', name: 'detail_macro.jpg', type: 'image', size: '5.2 MB', dim: '4000×3000', dur: '', status: 'draft', coll: 'c2', cat: '제품', channels: ['웹'], owner: '정태윤', collab: [], shot: '2026-06-29', tags: ['매크로', '디테일'], rating: 3, approved: false, up: '2일 전', upDate: '2026-06-30', tone: 0.8 },
+      { id: 'a11', name: 'lifestyle_02.jpg', type: 'image', size: '7.9 MB', dim: '5000×3333', dur: '', status: 'published', coll: 'c1', cat: '브랜드', channels: ['웹', '소셜'], owner: '최유진', collab: ['박민지'], shot: '2026-06-17', tags: ['라이프스타일'], rating: 4, approved: true, up: '2주 전', upDate: '2026-06-17', tone: 0.64 },
+      { id: 'a12', name: 'unboxing_short.mp4', type: 'video', size: '78 MB', dim: '1920×1080', dur: '00:48', status: 'draft', coll: 'c4', cat: '제품', channels: ['소셜'], owner: '이준호', collab: [], shot: '2026-06-30', tags: ['언박싱', '쇼츠'], rating: 3, approved: false, up: '어제', upDate: '2026-07-01', tone: 0.5 },
+      { id: 'a13', name: 'booth_wide.jpg', type: 'image', size: '11.4 MB', dim: '6000×3375', dur: '', status: 'published', coll: 'c3', cat: '이벤트', channels: ['웹'], owner: '최유진', collab: [], shot: '2026-06-16', tags: ['부스', '와이드'], rating: 4, approved: true, up: '2주 전', upDate: '2026-06-16', tone: 0.58 },
+      { id: 'a14', name: 'hero_loop.mp4', type: 'video', size: '128 MB', dim: '2560×1440', dur: '00:20', status: 'review', coll: 'c1', cat: '브랜드', channels: ['웹', '소셜'], owner: '김서연', collab: ['이준호'], shot: '2026-06-28', tags: ['히어로', '루프'], rating: 5, approved: false, up: '5시간 전', upDate: '2026-07-02', tone: 0.66 },
+      { id: 'a15', name: 'flatlay_tools.jpg', type: 'image', size: '4.5 MB', dim: '3600×2400', dur: '', status: 'published', coll: 'c2', cat: '제품', channels: ['웹', '이메일'], owner: '박민지', collab: [], shot: '2026-06-21', tags: ['플랫레이', '도구'], rating: 4, approved: true, up: '1주 전', upDate: '2026-06-23', tone: 0.78 },
+      { id: 'a16', name: 'backstage_candid.jpg', type: 'image', size: '6.1 MB', dim: '4500×3000', dur: '', status: 'draft', coll: 'c3', cat: '이벤트', channels: ['소셜'], owner: '정태윤', collab: ['최유진'], shot: '2026-06-30', tags: ['백스테이지'], rating: 2, approved: false, up: '어제', upDate: '2026-07-01', tone: 0.46 },
+    ];
+  }
+  seedCollections() {
+    return [
+      { id: 'c1', name: '브랜드 캠페인 2026', desc: '2026 상반기 브랜드 캠페인 자산', owner: '김서연' },
+      { id: 'c2', name: '제품 사진', desc: '제품 상세 · 패키지 촬영', owner: '정태윤' },
+      { id: 'c3', name: '이벤트 아카이브', desc: '오프라인 이벤트 기록', owner: '최유진' },
+      { id: 'c4', name: '소셜 클립', desc: '숏폼 · 소셜 채널용', owner: '이준호' },
+    ];
+  }
+
+  // ---------- helpers ----------
+  hue(n) { let h = 0; for (let i = 0; i < (n || '').length; i++) h = (h * 31 + n.charCodeAt(i)) % 360; return h; }
+  av(n, dim, fs) { const h = this.hue(n); return { initial: (n || '?').slice(0, 1), style: `display: inline-grid; place-items: center; width: ${dim}px; height: ${dim}px; border-radius: 50%; font-size: ${fs}px; font-weight: 700; flex-shrink: 0; background: oklch(0.93 0.035 ${h}); color: oklch(0.42 0.09 ${h});` }; }
+  thumb(t) { const v = Number(t == null ? 0.6 : t); const a = v.toFixed(3); const b = Math.max(0.1, v - 0.05).toFixed(3); return `background: repeating-linear-gradient(135deg, oklch(${a} 0.008 265) 0 13px, oklch(${b} 0.008 265) 13px 26px);`; }
+  stMap(s) { return ({ published: { ko: '게시됨', dot: 'var(--ok)', bg: 'var(--ok-bg)', fg: 'var(--ok-fg)' }, review: { ko: '검토 중', dot: 'var(--warn)', bg: 'var(--warn-bg)', fg: 'var(--warn-fg)' }, draft: { ko: '초안', dot: 'var(--text-3)', bg: 'var(--bg-subtle)', fg: 'var(--text-3)' } })[s] || { ko: s, dot: 'var(--text-3)', bg: 'var(--bg-subtle)', fg: 'var(--text-3)' }; }
+  bytes(str) { const m = String(str).match(/([\d.]+)\s*(GB|MB|KB)/i); if (!m) return 0; const n = parseFloat(m[1]); const u = m[2].toUpperCase(); return n * (u === 'GB' ? 1e9 : u === 'MB' ? 1e6 : 1e3); }
+  collName(id) { const c = this.state.collections.find(x => x.id === id); return c ? c.name : '—'; }
+
+  // ---------- navigation / actions ----------
+  go(screen) { this.setState({ screen, detailId: null, editing: false, draft: null, sel: [] }); }
+  openDetail(id) { this.setState({ detailId: id, detailTab: 'meta', editing: false, draft: null }); }
+  backDetail() { this.setState({ detailId: null, editing: false, draft: null }); }
+  toggleTheme(next) { this.setState({ theme: next || (this.state.theme === 'light' ? 'dark' : 'light') }, () => this.persist()); }
+
+  fireToast(tone, msg) { if (this._t) clearTimeout(this._t); this.setState({ toast: { tone, msg } }); this._t = setTimeout(() => this.setState({ toast: null }), 3200); }
+
+  openUpload() { const c0 = this.state.collections[0]; this.setState({ uploadOpen: true, up: { title: '', coll: c0 ? c0.name : '', type: '이미지', cat: '브랜드', channels: [], review: true } }); }
+  upSet(k, v) { this.setState(s => ({ up: Object.assign({}, s.up, { [k]: v }) })); }
+  submitUpload() {
+    const s = this.state; const up = s.up || {};
+    const title = (up.title || '').trim();
+    const type = up.type === '영상' ? 'video' : 'image';
+    const ext = type === 'video' ? '.mp4' : '.jpg';
+    let base = title ? title.replace(/\s+/g, '_').toLowerCase() : 'untitled_' + Math.floor(Math.random() * 900 + 100);
+    const name = /\.(jpg|jpeg|png|webp|mp4|mov)$/i.test(base) ? base : base + ext;
+    const coll = (s.collections.find(c => c.name === up.coll) || s.collections[0]).id;
+    const na = { id: 'a' + Date.now(), name, type, size: type === 'video' ? '64 MB' : '5.0 MB', dim: type === 'video' ? '1920×1080' : '4000×3000', dur: type === 'video' ? '00:20' : '', status: up.review ? 'review' : 'draft', coll, cat: up.cat || '브랜드', channels: up.channels || [], owner: s.prefs.name, collab: [], shot: '2026-07-02', tags: [], rating: 0, approved: false, up: '방금', upDate: '2026-07-02', tone: 0.5 + Math.random() * 0.3 };
+    this.setState(st => ({ assets: [na, ...st.assets], uploadOpen: false, screen: 'library', detailId: null, collectionFilter: null, statusFilter: 'all', typeFilter: 'all', q: '', page: 1, sel: [] }), () => { this.persist(); this.fireToast('success', '업로드가 시작되었습니다 · ' + name); });
+  }
+
+  askDelete(target) { this.setState({ deleteOpen: true, deleteTarget: target }); }
+  confirmDelete() {
+    const s = this.state; const t = s.deleteTarget;
+    let removeIds = t === 'bulk' ? s.sel.slice() : [t];
+    const detailGone = s.detailId && removeIds.includes(s.detailId);
+    this.setState(st => ({ assets: st.assets.filter(a => !removeIds.includes(a.id)), sel: st.sel.filter(id => !removeIds.includes(id)), deleteOpen: false, deleteTarget: null, detailId: detailGone ? null : st.detailId }), () => { this.persist(); this.fireToast('success', removeIds.length + '개 항목이 삭제되었습니다'); });
+  }
+
+  setStatus(id, status) { this.setState(st => ({ assets: st.assets.map(a => a.id === id ? Object.assign({}, a, { status, approved: status === 'published' ? true : a.approved }) : a) }), () => this.persist()); }
+
+  // ---------- render ----------
+  renderVals() {
+    return Object.assign({}, this.baseVals(), this.dashVals(), this.overlayVals(), this.libVals(), this.colVals(), this.revVals(), this.detVals(), this.setVals());
+  }
+
+  baseVals() {
+    const s = this.state;
+    const rev = s.assets.filter(a => a.status === 'review').length;
+    const detail = s.detailId ? s.assets.find(a => a.id === s.detailId) : null;
+    const navItems = [
+      { id: 'dashboard', label: '개요', glyph: 'compass' },
+      { id: 'library', label: '미디어 라이브러리', glyph: 'image' },
+      { id: 'collections', label: '컬렉션', glyph: 'folder' },
+      { id: 'review', label: '검토 대기', glyph: 'clock', badge: rev > 0 ? String(rev) : null },
+      { id: 'settings', label: '설정', glyph: 'settings' },
+    ];
+    let pageTitle = '개요';
+    if (detail) pageTitle = detail.name;
+    else if (s.screen === 'library') pageTitle = s.collectionFilter ? this.collName(s.collectionFilter) : '미디어 라이브러리';
+    else pageTitle = ({ dashboard: '개요', collections: '컬렉션', review: '검토 대기', settings: '설정' })[s.screen] || '개요';
+    return {
+      theme: s.theme,
+      activeSection: s.screen,
+      navItems,
+      pageTitle,
+      brand: this.props.sidebarBrand ?? 'Frame',
+      userName: s.prefs.name,
+      userRole: s.prefs.role,
+      isDashboard: s.screen === 'dashboard' && !s.detailId,
+      isLibrary: s.screen === 'library' && !s.detailId,
+      isCollections: s.screen === 'collections' && !s.detailId,
+      isReview: s.screen === 'review' && !s.detailId,
+      isSettings: s.screen === 'settings' && !s.detailId,
+      isDetail: !!s.detailId,
+      screensSentinel: false,
+      onNavigate: (key) => this.go(key),
+      onToggleTheme: (next) => this.toggleTheme(next),
+      onSearch: (v) => this.setState({ q: v, screen: 'library', detailId: null, page: 1 }),
+      goLibrary: () => this.setState({ screen: 'library', detailId: null, collectionFilter: null, q: '', typeFilter: 'all', statusFilter: 'all', page: 1 }),
+      goReview: () => this.go('review'),
+    };
+  }
+
+  dashVals() {
+    const s = this.state; const A = s.assets;
+    const cnt = st => A.filter(a => a.status === st).length;
+    const recent = A.slice().sort((a, b) => a.upDate < b.upDate ? 1 : (a.upDate > b.upDate ? -1 : 0)).slice(0, 6);
+    const reviewers = A.filter(a => a.status === 'review').slice(0, 4);
+    return {
+      greeting: s.prefs.name + '님, 안녕하세요',
+      todayLabel: '2026년 7월 2일',
+      statTotal: String(A.length),
+      statMonth: String(A.filter(a => a.upDate >= '2026-06-01').length),
+      statReview: String(cnt('review')),
+      statPublished: String(cnt('published')),
+      statTotalDelta: '+3', statMonthDelta: '+12', statReviewDelta: String(cnt('review')), statPubDelta: '+5',
+      dashRecent: recent.map(a => ({ card: { name: a.name, type: a.type, size: a.size, dim: a.dim, status: a.status, dur: a.dur, tone: a.tone, onOpen: () => this.openDetail(a.id) } })),
+      dashReview: reviewers.map(a => { const av = this.av(a.owner, 26, 10); return { name: a.name, owner: a.owner, up: a.up, thumb: this.thumb(a.tone), avStyle: av.style, avInitial: av.initial, onOpen: () => this.openDetail(a.id) }; }),
+      dashReviewEmpty: reviewers.length === 0,
+      storagePct: 32, storageUsed: '1.6 TB', storageTotal: '5 TB',
+    };
+  }
+
+  overlayVals() {
+    const s = this.state; const up = s.up || {};
+    const t = s.deleteTarget;
+    let delTitle = '항목을 삭제할까요?'; let delBody = '이 작업은 되돌릴 수 없습니다.';
+    if (t === 'bulk') { delTitle = s.sel.length + '개 항목을 삭제할까요?'; delBody = '선택한 ' + s.sel.length + '개 항목이 워크스페이스에서 영구적으로 제거됩니다. 이 작업은 되돌릴 수 없습니다.'; }
+    else if (t) { const a = s.assets.find(x => x.id === t); delTitle = (a ? a.name : '항목') + ' 을(를) 삭제할까요?'; delBody = '이 항목이 워크스페이스에서 영구적으로 제거됩니다. 이 작업은 되돌릴 수 없습니다.'; }
+    return {
+      uploadOpen: s.uploadOpen,
+      upTitle: up.title || '', upColl: up.coll || '', upType: up.type || '이미지', upCat: up.cat || '브랜드', upChannels: up.channels || [], upReview: up.review !== false,
+      collectionNames: s.collections.map(c => c.name),
+      typeNames: ['이미지', '영상'], categoryNames: ['브랜드', '제품', '이벤트', '팀'], channelNames: ['웹', '소셜', '인쇄', '이메일'],
+      upSetTitle: (v) => this.upSet('title', v), upSetColl: (v) => this.upSet('coll', v), upSetType: (v) => this.upSet('type', v), upSetCat: (v) => this.upSet('cat', v), upSetChannels: (v) => this.upSet('channels', v), upSetReview: (v) => this.upSet('review', v),
+      closeUpload: () => this.setState({ uploadOpen: false }), submitUpload: () => this.submitUpload(),
+      openUpload: () => this.openUpload(),
+      deleteOpen: s.deleteOpen, deleteTitle: delTitle, deleteBody: delBody,
+      closeDelete: () => this.setState({ deleteOpen: false, deleteTarget: null }), confirmDelete: () => this.confirmDelete(),
+      toastOpen: !!s.toast, toastTone: s.toast ? s.toast.tone : 'success', toastMsg: s.toast ? s.toast.msg : '',
+      closeToast: () => { if (this._t) clearTimeout(this._t); this.setState({ toast: null }); },
+    };
+  }
+
+  toggleSel(id, on) { this.setState(s => ({ sel: on ? Array.from(new Set(s.sel.concat([id]))) : s.sel.filter(x => x !== id) })); }
+  libVals() {
+    const s = this.state;
+    let list = s.assets.slice();
+    if (s.collectionFilter) list = list.filter(a => a.coll === s.collectionFilter);
+    if (s.typeFilter !== 'all') list = list.filter(a => a.type === s.typeFilter);
+    if (s.statusFilter !== 'all') list = list.filter(a => a.status === s.statusFilter);
+    const q = (s.q || '').trim().toLowerCase();
+    if (q) list = list.filter(a => a.name.toLowerCase().includes(q) || (a.tags || []).some(t => t.toLowerCase().includes(q)) || (a.cat || '').toLowerCase().includes(q) || a.owner.toLowerCase().includes(q));
+    if (s.sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
+    else if (s.sort === 'size') list.sort((a, b) => this.bytes(b.size) - this.bytes(a.size));
+    else if (s.sort === 'rating') list.sort((a, b) => b.rating - a.rating);
+    else list.sort((a, b) => a.upDate < b.upDate ? 1 : (a.upDate > b.upDate ? -1 : 0));
+
+    const per = s.view === 'grid' ? 12 : 10;
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / per));
+    const page = Math.min(s.page, totalPages);
+    const start = (page - 1) * per;
+    const pageItems = list.slice(start, start + per);
+    const sel = s.sel;
+
+    const chips = [];
+    if (s.collectionFilter) chips.push({ label: '컬렉션: ' + this.collName(s.collectionFilter), onClear: () => this.setState({ collectionFilter: null, page: 1 }) });
+    if (s.typeFilter !== 'all') chips.push({ label: '유형: ' + (s.typeFilter === 'video' ? '영상' : '이미지'), onClear: () => this.setState({ typeFilter: 'all', page: 1 }) });
+    if (s.statusFilter !== 'all') chips.push({ label: '상태: ' + this.stMap(s.statusFilter).ko, onClear: () => this.setState({ statusFilter: 'all', page: 1 }) });
+    if (q) chips.push({ label: '검색: ' + s.q, onClear: () => this.setState({ q: '', page: 1 }) });
+
+    const seg = on => `width: 34px; height: 32px; border-radius: 7px; border: none; cursor: pointer; display: grid; place-items: center; background: ${on ? 'var(--bg-surface)' : 'transparent'}; color: ${on ? 'var(--text-1)' : 'var(--text-3)'}; box-shadow: ${on ? 'var(--shadow-sm)' : 'none'};`;
+
+    return {
+      libCount: total,
+      libRangeLabel: total > 0 ? (start + 1) + '–' + Math.min(start + per, total) : '0',
+      libTypeTabs: [{ value: 'all', label: '전체' }, { value: 'image', label: '이미지' }, { value: 'video', label: '영상' }],
+      libType: s.typeFilter,
+      libSetType: (v) => this.setState({ typeFilter: v, page: 1 }),
+      libStatus: s.statusFilter,
+      statusOptions: [{ value: 'all', label: '모든 상태' }, { value: 'published', label: '게시됨' }, { value: 'review', label: '검토 중' }, { value: 'draft', label: '초안' }],
+      libSetStatus: (v) => this.setState({ statusFilter: v, page: 1 }),
+      libSort: s.sort,
+      sortOptions: [{ value: 'recent', label: '최신순' }, { value: 'name', label: '이름순' }, { value: 'size', label: '크기순' }, { value: 'rating', label: '평점순' }],
+      libSetSort: (v) => this.setState({ sort: v, page: 1 }),
+      gridBtnStyle: seg(s.view === 'grid'), listBtnStyle: seg(s.view === 'list'),
+      setViewGrid: () => this.setState({ view: 'grid', page: 1 }), setViewList: () => this.setState({ view: 'list', page: 1 }),
+      libViewGrid: s.view === 'grid', libViewList: s.view === 'list',
+      libChips: chips, hasChips: chips.length > 0,
+      clearFilters: () => this.setState({ q: '', typeFilter: 'all', statusFilter: 'all', collectionFilter: null, page: 1 }),
+      libGrid: pageItems.map(a => ({ card: { name: a.name, type: a.type, size: a.size, dim: a.dim, status: a.status, dur: a.dur, tone: a.tone, selected: sel.includes(a.id), onToggle: (on) => this.toggleSel(a.id, on), onOpen: () => this.openDetail(a.id) } })),
+      libCols: [
+        { key: 'name', label: '이름', type: 'mono', width: '2.4fr' },
+        { key: 'type', label: '유형', type: 'iconText', width: '0.9fr' },
+        { key: 'meta', label: '크기 / 해상도', type: 'text', muted: true, width: '1.3fr' },
+        { key: 'status', label: '상태', type: 'badge', width: '0.9fr' },
+        { key: 'owner', label: '담당자', type: 'avatar', width: '1.1fr' },
+        { key: 'up', label: '업로드', type: 'text', muted: true, width: '0.8fr' },
+        { key: 'actions', label: '', type: 'actions', width: '52px', align: 'right' },
+      ],
+      libRows: pageItems.map(a => ({ id: a.id, name: a.name, type: { text: a.type === 'video' ? '영상' : '이미지', glyph: a.type === 'video' ? 'film' : 'image' }, meta: a.dim + ' · ' + a.size, status: a.status, owner: a.owner, up: a.up })),
+      openDetailRow: (row) => this.openDetail(row.id),
+      libEmpty: total === 0, libHasResults: total > 0,
+      libGridCols: (this.props.denseGrid === true || this.props.denseGrid === 'true') ? 'repeat(auto-fill, minmax(168px, 1fr))' : 'repeat(auto-fill, minmax(212px, 1fr))',
+      selCount: sel.length, hasSel: sel.length > 0,
+      selectAllVisible: () => { const ids = pageItems.map(a => a.id); this.setState(st => { const all = ids.every(id => st.sel.includes(id)); return { sel: all ? st.sel.filter(id => !ids.includes(id)) : Array.from(new Set(st.sel.concat(ids))) }; }); },
+      clearSel: () => this.setState({ sel: [] }),
+      bulkPublish: () => { this.setState(st => ({ assets: st.assets.map(a => st.sel.includes(a.id) ? Object.assign({}, a, { status: 'published', approved: true }) : a), sel: [] }), () => { this.persist(); this.fireToast('success', '선택 항목을 게시했습니다'); }); },
+      bulkDelete: () => this.askDelete('bulk'),
+      libPage: page, libTotalPages: totalPages, libShowPager: totalPages > 1,
+      setLibPage: (n) => this.setState({ page: n }),
+    };
+  }
+  colVals() {
+    const s = this.state;
+    const cards = s.collections.map(c => {
+      const items = s.assets.filter(a => a.coll === c.id);
+      const thumbs = items.slice(0, 4).map(a => this.thumb(a.tone));
+      while (thumbs.length < 4) thumbs.push('background: var(--bg-subtle);');
+      const owners = Array.from(new Set(items.map(a => a.owner))).slice(0, 3).map(n => this.av(n, 24, 10));
+      return { id: c.id, name: c.name, desc: c.desc, count: items.length, pub: items.filter(a => a.status === 'published').length, thumbs, owners, onOpen: () => this.setState({ screen: 'library', detailId: null, collectionFilter: c.id, q: '', typeFilter: 'all', statusFilter: 'all', page: 1 }) };
+    });
+    return {
+      collectionCards: cards,
+      collectionTotal: s.collections.length,
+      newCollection: () => { this.setState(st => ({ collections: st.collections.concat([{ id: 'col' + Date.now(), name: '새 컬렉션 ' + (st.collections.length + 1), desc: '설명을 추가하세요', owner: st.prefs.name }]) }), () => { this.persist(); this.fireToast('success', '새 컬렉션이 생성되었습니다'); }); },
+    };
+  }
+  revVals() {
+    const s = this.state;
+    const items = s.assets.filter(a => a.status === 'review');
+    return {
+      reviewCount: items.length,
+      reviewEmpty: items.length === 0,
+      reviewItems: items.map(a => ({
+        id: a.id, name: a.name, meta: a.dim + ' · ' + a.size, typeLabel: a.type === 'video' ? '영상' : '이미지',
+        coll: this.collName(a.coll), owner: a.owner, up: a.up, thumb: this.thumb(a.tone), isVideo: a.type === 'video', av: this.av(a.owner, 28, 11),
+        onOpen: () => this.openDetail(a.id),
+        onApprove: () => { this.setStatus(a.id, 'published'); this.fireToast('success', a.name + ' 승인 · 게시되었습니다'); },
+        onReject: () => { this.setStatus(a.id, 'draft'); this.fireToast('info', a.name + ' 반려 · 초안으로 이동'); },
+      })),
+    };
+  }
+  draftSet(k, v) { this.setState(s => ({ draft: Object.assign({}, s.draft, { [k]: v }) })); }
+  saveEdit() {
+    const s = this.state; const d = s.draft || {}; const id = s.detailId;
+    const collId = (s.collections.find(c => c.name === d.collName) || {}).id;
+    this.setState(st => ({ assets: st.assets.map(a => a.id === id ? Object.assign({}, a, { name: d.name || a.name, cat: d.cat, coll: collId || a.coll, channels: d.channels || [], collab: d.collab || [], tags: d.tags || [], shot: d.shot, rating: Number(d.rating) || 0, approved: !!d.approved, desc: d.desc }) : a), editing: false, draft: null }), () => { this.persist(); this.fireToast('success', '변경사항이 저장되었습니다'); });
+  }
+  detVals() {
+    const s = this.state;
+    const a = s.detailId ? s.assets.find(x => x.id === s.detailId) : null;
+    if (!a) return {};
+    const st = this.stMap(a.status);
+    const editing = s.editing; const d = s.draft || {};
+    const fmt = (() => { const m = a.name.match(/\.([a-z0-9]+)$/i); return m ? m[1].toUpperCase() : (a.type === 'video' ? 'MP4' : 'JPG'); })();
+    const metaProps = [
+      { label: '제목', type: 'text', value: a.name, required: true },
+      { label: '카테고리', type: 'select', value: a.cat },
+      { label: '컬렉션', type: 'select', value: this.collName(a.coll) },
+      { label: '사용 채널', type: 'multiselect', value: a.channels },
+      { label: '태그', type: 'tags', value: a.tags },
+      { label: '촬영일', type: 'date', value: a.shot },
+      { label: '담당자', type: 'user', value: a.owner },
+      { label: '협업자', type: 'multiuser', value: a.collab },
+      { label: '품질 평점', type: 'rating', value: a.rating },
+      { label: '승인 완료', type: 'boolean', value: a.approved },
+      { label: '설명', type: 'text', value: a.desc },
+    ];
+    const versions = [
+      { label: 'v3', title: '현재 버전', cur: true, by: a.owner, time: a.up, size: a.size, canRestore: false },
+      { label: 'v2', title: '색보정 적용', cur: false, by: (a.collab[0] || a.owner), time: '1주 전', size: a.size, canRestore: true, onRestore: () => this.fireToast('info', 'v2로 복원했습니다') },
+      { label: 'v1', title: '초기 업로드', cur: false, by: a.owner, time: '2주 전', size: a.size, canRestore: true, onRestore: () => this.fireToast('info', 'v1로 복원했습니다') },
+    ];
+    const ic = (g, tone) => ({ icon: g, bg: tone === 'ok' ? 'var(--ok-bg)' : tone === 'warn' ? 'var(--warn-bg)' : 'var(--accent-subtle)', fg: tone === 'ok' ? 'var(--ok-fg)' : tone === 'warn' ? 'var(--warn-fg)' : 'var(--accent-text)' });
+    const activity = [
+      Object.assign({ text: a.owner + '님이 파일을 업로드했습니다', time: a.up }, ic('upload', 'accent')),
+      Object.assign({ text: 'AI가 태그 ' + (a.tags.length) + '개를 제안했습니다', time: a.up }, ic('tag', 'accent')),
+      Object.assign({ text: (a.collab[0] || a.owner) + '님이 메타데이터를 편집했습니다', time: '3일 전' }, ic('edit', 'accent')),
+      a.status === 'published' ? Object.assign({ text: '게시되어 공개되었습니다', time: '방금' }, ic('checkCircle', 'ok')) : Object.assign({ text: '검토 대기 중입니다', time: '방금' }, ic('clock', 'warn')),
+    ];
+    const tagSet = new Set(); s.assets.forEach(x => (x.tags || []).forEach(t => tagSet.add(t)));
+    return {
+      detName: a.name, detStatusKo: st.ko, detStatusBg: st.bg, detStatusFg: st.fg, detStatusDot: st.dot,
+      detEditing: editing, detViewing: !editing,
+      detThumb: this.thumb(a.tone), detIsVideo: a.type === 'video', detDur: a.dur,
+      detTypeLabel: a.type === 'video' ? '영상' : '이미지', detFormat: fmt, detSize: a.size, detDim: a.dim,
+      detOwner: a.owner, detOwnerAv: this.av(a.owner, 26, 10), detColl: this.collName(a.coll), detUp: a.up, detShot: a.shot,
+      detCollabAvs: (a.collab || []).map(n => this.av(n, 24, 10)),
+      crumbItems: [
+        { label: '라이브러리', onClick: () => this.setState({ screen: 'library', detailId: null, collectionFilter: null, q: '', typeFilter: 'all', statusFilter: 'all', page: 1 }) },
+        { label: this.collName(a.coll), onClick: () => this.setState({ screen: 'library', detailId: null, collectionFilter: a.coll, q: '', typeFilter: 'all', statusFilter: 'all', page: 1 }) },
+        { label: a.name },
+      ],
+      detBack: () => this.backDetail(),
+      startEdit: () => this.setState({ editing: true, draft: { name: a.name, cat: a.cat, collName: this.collName(a.coll), channels: (a.channels || []).slice(), collab: (a.collab || []).slice(), tags: (a.tags || []).slice(), shot: a.shot, rating: a.rating, approved: a.approved, desc: a.desc || '' } }),
+      cancelEdit: () => this.setState({ editing: false, draft: null }),
+      saveEdit: () => this.saveEdit(),
+      detPublishLabel: a.status === 'published' ? '게시 취소' : '게시',
+      detPublishAction: () => { const to = a.status === 'published' ? 'draft' : 'published'; this.setStatus(a.id, to); this.fireToast('success', to === 'published' ? '게시되었습니다' : '게시가 취소되었습니다'); },
+      detDelete: () => this.askDelete(a.id),
+      detailTabItems: [{ value: 'meta', label: '메타데이터' }, { value: 'versions', label: '버전 기록' }, { value: 'activity', label: '활동' }],
+      detailTab: s.detailTab, setDetailTab: (v) => this.setState({ detailTab: v }),
+      detTabMeta: s.detailTab === 'meta', detTabVersions: s.detailTab === 'versions', detTabActivity: s.detailTab === 'activity',
+      metaFields: metaProps.map(p => ({ props: Object.assign({ labelCol: '128px' }, p) })),
+      versions, activity,
+      userNames: ['김서연', '이준호', '박민지', '정태윤', '최유진'], tagPool: Array.from(tagSet),
+      eName: d.name != null ? d.name : a.name, eCat: d.cat != null ? d.cat : a.cat, eColl: d.collName != null ? d.collName : this.collName(a.coll),
+      eChannels: d.channels || a.channels || [], eCollab: d.collab || a.collab || [], eTags: d.tags || a.tags || [],
+      eShot: d.shot != null ? d.shot : a.shot, eRating: d.rating != null ? d.rating : a.rating, eDesc: d.desc != null ? d.desc : (a.desc || ''), eApproved: d.approved != null ? d.approved : a.approved,
+      setName: (v) => this.draftSet('name', v), setCat: (v) => this.draftSet('cat', v), setColl: (v) => this.draftSet('collName', v), setChannels: (v) => this.draftSet('channels', v), setCollab: (v) => this.draftSet('collab', v), setTags: (v) => this.draftSet('tags', v), setShot: (v) => this.draftSet('shot', v), setRating: (v) => this.draftSet('rating', v), setDesc: (v) => this.draftSet('desc', v), setApproved: (v) => this.draftSet('approved', v),
+    };
+  }
+  setPref(k, v) { this.setState(s => ({ prefs: Object.assign({}, s.prefs, { [k]: v }) }), () => this.persist()); }
+  setVals() {
+    const s = this.state; const p = s.prefs; const tab = s.settingsTab;
+    const team = [
+      { name: '김서연', email: 'soyeon@frame.io', role: '관리자', tone: 'accent', status: '활성' },
+      { name: '이준호', email: 'junho@frame.io', role: '편집자', tone: 'neutral', status: '활성' },
+      { name: '박민지', email: 'minji@frame.io', role: '편집자', tone: 'neutral', status: '활성' },
+      { name: '정태윤', email: 'taeyoon@frame.io', role: '뷰어', tone: 'neutral', status: '대기' },
+      { name: '최유진', email: 'yujin@frame.io', role: '편집자', tone: 'neutral', status: '활성' },
+    ];
+    const notif = [
+      { key: 'notifEmail', title: '이메일 알림', desc: '주요 활동을 이메일로 받습니다', checked: p.notifEmail },
+      { key: 'notifReview', title: '검토 요청', desc: '내 검토가 필요할 때 알립니다', checked: p.notifReview },
+      { key: 'notifComment', title: '댓글 및 멘션', desc: '댓글과 멘션 알림을 받습니다', checked: p.notifComment },
+      { key: 'notifWeekly', title: '주간 요약', desc: '매주 워크스페이스 요약을 받습니다', checked: p.notifWeekly },
+      { key: 'autoTag', title: 'AI 자동 태깅', desc: '업로드 시 태그를 자동 제안합니다', checked: p.autoTag },
+    ];
+    return {
+      settingsTabItems: [{ value: 'profile', label: '프로필' }, { value: 'team', label: '팀 멤버' }, { value: 'notif', label: '알림' }, { value: 'storage', label: '스토리지' }],
+      settingsTab: tab, setSettingsTab: (v) => this.setState({ settingsTab: v }),
+      setIsProfile: tab === 'profile', setIsTeam: tab === 'team', setIsNotif: tab === 'notif', setIsStorage: tab === 'storage',
+      pfName: p.name, pfEmail: p.email, pfRole: p.role, pfLang: p.lang, pfAvatar: this.av(p.name, 60, 22),
+      roleOptions: ['관리자', '편집자', '뷰어'], langOptions: ['한국어', 'English', '日本語'],
+      setPfName: (v) => this.setPref('name', v), setPfEmail: (v) => this.setPref('email', v), setPfRole: (v) => this.setPref('role', v), setPfLang: (v) => this.setPref('lang', v),
+      saveProfile: () => { this.persist(); this.fireToast('success', '프로필이 저장되었습니다'); },
+      settingsSoon: () => this.fireToast('info', '곧 지원될 기능입니다'),
+      teamCount: team.length,
+      teamCols: [
+        { key: 'member', label: '멤버', type: 'avatar', width: '1.6fr' },
+        { key: 'email', label: '이메일', type: 'text', muted: true, width: '1.6fr' },
+        { key: 'role', label: '역할', type: 'badge', width: '1fr' },
+        { key: 'status', label: '상태', type: 'text', width: '0.8fr' },
+        { key: 'actions', label: '', type: 'actions', width: '52px', align: 'right' },
+      ],
+      teamRows: team.map((m, i) => ({ id: 'u' + i, member: m.name, email: m.email, role: { tone: m.tone, label: m.role }, status: m.status })),
+      inviteMember: () => this.fireToast('success', '초대 링크가 복사되었습니다'),
+      notifRows: notif.map((n, i) => ({ title: n.title, desc: n.desc, checked: n.checked, border: i < notif.length - 1 ? 'border-bottom: 1px solid var(--border);' : '', onChange: (v) => this.setPref(n.key, v) })),
+      storPct: 32, storUsed: '1.6 TB', storTotal: '5 TB',
+      storStats: [
+        { props: { label: '이미지', value: String(s.assets.filter(a => a.type === 'image').length) + '개', glyph: 'image' } },
+        { props: { label: '영상', value: String(s.assets.filter(a => a.type === 'video').length) + '개', glyph: 'film' } },
+        { props: { label: '컬렉션', value: String(s.collections.length) + '개', glyph: 'folder' } },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

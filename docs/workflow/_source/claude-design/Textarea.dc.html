@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --border: oklch(0.918 0.004 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-subtle: oklch(0.955 0.022 264);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --border: oklch(0.29 0.007 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-subtle: oklch(0.3 0.045 264);
+  }
+  * { box-sizing: border-box; }
+  [data-ta]::placeholder { color: var(--text-3); }
+</style>
+</helmet>
+<label style="display: block; font-family: 'IBM Plex Sans KR', sans-serif;">
+  <sc-if value="{{ showLabel }}"><span style="display: block; font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 8px;">{{ label }}</span></sc-if>
+  <textarea data-ta rows="{{ rows }}" onInput="{{ onInput }}" placeholder="{{ placeholder }}" value="{{ val }}" style="width: 100%; padding: 11px 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-1); font-size: 14px; font-family: inherit; outline: none; resize: vertical; line-height: 1.6;" style-focus="border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle);"></textarea>
+</label>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 340, &quot;height&quot;: 130}, &quot;label&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;설명&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;value&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;placeholder&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;내용을 입력하세요…&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;rows&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: 3, &quot;min&quot;: 2, &quot;max&quot;: 10, &quot;tsType&quot;: &quot;number&quot;}}">
+class Component extends DCLogic {
+  state = { val: null };
+  renderVals() {
+    const p = this.props;
+    const val = this.state.val == null ? (p.value ?? '') : this.state.val;
+    return {
+      label: p.label ?? '',
+      showLabel: !!(p.label),
+      placeholder: p.placeholder ?? '내용을 입력하세요…',
+      rows: p.rows ?? 3,
+      val,
+      onInput: (e) => { this.setState({ val: e.target.value }); if (this.props.onChange) this.props.onChange(e.target.value); },
+    };
+  }
+}
+</script>
+</body>
+</html>

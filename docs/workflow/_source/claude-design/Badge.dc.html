@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-subtle: oklch(0.966 0.003 265); --border: oklch(0.918 0.004 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+    --ok: oklch(0.62 0.09 155); --ok-bg: oklch(0.95 0.03 155); --ok-fg: oklch(0.44 0.08 155);
+    --warn: oklch(0.72 0.1 75); --warn-bg: oklch(0.96 0.04 82); --warn-fg: oklch(0.5 0.09 62);
+    --danger: oklch(0.57 0.16 25); --danger-bg: oklch(0.96 0.03 25); --danger-fg: oklch(0.51 0.16 25);
+  }
+  html[data-theme="dark"] {
+    --bg-subtle: oklch(0.242 0.006 265); --border: oklch(0.29 0.007 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+    --ok: oklch(0.7 0.12 155); --ok-bg: oklch(0.31 0.05 155); --ok-fg: oklch(0.84 0.1 155);
+    --warn: oklch(0.8 0.12 82); --warn-bg: oklch(0.33 0.05 78); --warn-fg: oklch(0.88 0.1 85);
+    --danger: oklch(0.66 0.17 25); --danger-bg: oklch(0.33 0.07 25); --danger-fg: oklch(0.84 0.13 25);
+  }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<span style="{{ rootStyle }}">
+  <sc-if value="{{ showDot }}"><span style="{{ dotStyle }}"></span></sc-if>
+  {{ label }}
+</span>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 140, &quot;height&quot;: 56}, &quot;tone&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;published&quot;, &quot;review&quot;, &quot;draft&quot;, &quot;accent&quot;, &quot;ok&quot;, &quot;warn&quot;, &quot;danger&quot;, &quot;neutral&quot;], &quot;default&quot;: &quot;published&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;label&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;게시됨&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;dot&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;solid&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const tone = p.tone ?? 'neutral';
+    const label = p.label ?? 'Badge';
+    const dot = p.dot !== false && p.dot !== 'false';
+    const solid = p.solid === true || p.solid === 'true';
+
+    const tones = {
+      ok: { bg: 'var(--ok-bg)', fg: 'var(--ok-fg)', dot: 'var(--ok)' },
+      published: { bg: 'var(--ok-bg)', fg: 'var(--ok-fg)', dot: 'var(--ok)' },
+      warn: { bg: 'var(--warn-bg)', fg: 'var(--warn-fg)', dot: 'var(--warn)' },
+      review: { bg: 'var(--warn-bg)', fg: 'var(--warn-fg)', dot: 'var(--warn)' },
+      danger: { bg: 'var(--danger-bg)', fg: 'var(--danger-fg)', dot: 'var(--danger)' },
+      accent: { bg: 'var(--accent-subtle)', fg: 'var(--accent-text)', dot: 'var(--accent)' },
+      neutral: { bg: 'var(--bg-subtle)', fg: 'var(--text-2)', dot: 'var(--text-3)' },
+      draft: { bg: 'var(--bg-subtle)', fg: 'var(--text-2)', dot: 'var(--text-3)' },
+    };
+    const T = tones[tone] || tones.neutral;
+
+    let rootStyle;
+    if (solid) {
+      rootStyle = `display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 20px; height: 20px; padding: 0 7px; border-radius: 20px; font-size: 11px; font-weight: 700; font-family: inherit; background: var(--danger); color: #fff;`;
+    } else {
+      rootStyle = `display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600; font-family: inherit; letter-spacing: -0.003em; background: ${T.bg}; color: ${T.fg};`;
+    }
+    return {
+      rootStyle, label,
+      showDot: dot && !solid,
+      dotStyle: `width: 5px; height: 5px; border-radius: 50%; background: ${T.dot}; flex-shrink: 0;`,
+    };
+  }
+}
+</script>
+</body>
+</html>

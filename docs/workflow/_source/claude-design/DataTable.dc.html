@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265); --bg-hover: oklch(0.952 0.004 265);
+    --border: oklch(0.918 0.004 265); --border-strong: oklch(0.85 0.006 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --accent: oklch(0.52 0.09 264); --accent-fg: oklch(0.99 0 0);
+    --ok: oklch(0.62 0.09 155); --ok-bg: oklch(0.95 0.03 155); --ok-fg: oklch(0.44 0.08 155);
+    --warn: oklch(0.72 0.1 75); --warn-bg: oklch(0.96 0.04 82); --warn-fg: oklch(0.5 0.09 62);
+    --danger: oklch(0.57 0.16 25); --danger-bg: oklch(0.96 0.03 25); --danger-fg: oklch(0.51 0.16 25);
+    --accent-subtle: oklch(0.955 0.022 264); --accent-text: oklch(0.5 0.1 264);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265); --bg-hover: oklch(0.278 0.008 265);
+    --border: oklch(0.29 0.007 265); --border-strong: oklch(0.38 0.01 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --accent: oklch(0.68 0.11 264); --accent-fg: oklch(0.16 0.02 264);
+    --ok: oklch(0.7 0.12 155); --ok-bg: oklch(0.31 0.05 155); --ok-fg: oklch(0.84 0.1 155);
+    --warn: oklch(0.8 0.12 82); --warn-bg: oklch(0.33 0.05 78); --warn-fg: oklch(0.88 0.1 85);
+    --danger: oklch(0.66 0.17 25); --danger-bg: oklch(0.33 0.07 25); --danger-fg: oklch(0.84 0.13 25);
+    --accent-subtle: oklch(0.3 0.045 264); --accent-text: oklch(0.82 0.09 264);
+  }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-surface); font-family: 'IBM Plex Sans KR', sans-serif;">
+  <div style="display: grid; grid-template-columns: {{ gridTemplate }}; align-items: center; gap: 12px; padding: 0 16px; height: 44px; background: var(--bg-subtle); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-3);">
+    <sc-if value="{{ selectable }}">
+      <button onClick="{{ onSelectAll }}" style="width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--border-strong); background: var(--bg-surface); cursor: pointer; display: grid; place-items: center; position: relative; padding: 0;"><sc-if value="{{ allSelected }}"><span style="position: absolute; inset: -1.5px; border-radius: 5px; background: var(--accent); display: grid; place-items: center; color: var(--accent-fg);"><ds-icon glyph="check" size="13" sw="2.4"></ds-icon></span></sc-if></button>
+    </sc-if>
+    <sc-for list="{{ headCells }}" as="h" hint-placeholder-count="5"><span style="{{ h.style }}">{{ h.label }}</span></sc-for>
+  </div>
+  <sc-for list="{{ rowsView }}" as="row" hint-placeholder-count="6">
+    <div onClick="{{ row.onClick }}" style="{{ row.rowStyle }}" style-hover="background: var(--bg-subtle);">
+      <sc-if value="{{ row.leftBar }}"><div style="position: absolute; left: 0; top: 0; bottom: 0; width: 2.5px; background: var(--accent);"></div></sc-if>
+      <sc-if value="{{ selectable }}">
+        <button onClick="{{ row.onToggle }}" style="width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--border-strong); background: var(--bg-surface); cursor: pointer; display: grid; place-items: center; position: relative; padding: 0;"><sc-if value="{{ row.checked }}"><span style="position: absolute; inset: -1.5px; border-radius: 5px; background: var(--accent); display: grid; place-items: center; color: var(--accent-fg);"><ds-icon glyph="check" size="13" sw="2.4"></ds-icon></span></sc-if></button>
+      </sc-if>
+      <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="5">
+        <div style="{{ cell.wrapStyle }}">
+          <sc-if value="{{ cell.isText }}"><span style="font-size: 13px; color: {{ cell.color }}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; {{ cell.font }}">{{ cell.text }}</span></sc-if>
+          <sc-if value="{{ cell.isBadge }}"><span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; background: {{ cell.bg }}; color: {{ cell.fg }};"><span style="width: 5px; height: 5px; border-radius: 50%; background: {{ cell.dot }};"></span>{{ cell.text }}</span></sc-if>
+          <sc-if value="{{ cell.isAvatar }}"><span style="{{ cell.avStyle }}">{{ cell.initial }}</span><span style="font-size: 13px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ cell.text }}</span></sc-if>
+          <sc-if value="{{ cell.isIconText }}"><span style="display: flex; color: var(--text-2);"><ds-icon glyph="{{ cell.glyph }}" size="15"></ds-icon></span><span style="font-size: 12.5px; color: var(--text-2);">{{ cell.text }}</span></sc-if>
+          <sc-if value="{{ cell.isActions }}"><button onClick="{{ cell.onAction }}" style="width: 30px; height: 30px; border-radius: 7px; border: none; background: transparent; color: var(--text-3); cursor: pointer; display: grid; place-items: center;" style-hover="background: var(--bg-hover); color: var(--text-1);"><ds-icon glyph="more" size="17"></ds-icon></button></sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 760, &quot;height&quot;: 300}, &quot;columns&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;object[]&quot;}, &quot;rows&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;object[]&quot;}, &quot;selectable&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { sel: [] };
+  hue(name) { let h = 0; for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) % 360; return h; }
+  toneMap(t) {
+    const m = {
+      published: { ko: '게시됨', bg: 'var(--ok-bg)', fg: 'var(--ok-fg)', dot: 'var(--ok)' },
+      review: { ko: '검토 중', bg: 'var(--warn-bg)', fg: 'var(--warn-fg)', dot: 'var(--warn)' },
+      draft: { ko: '초안', bg: 'var(--bg-subtle)', fg: 'var(--text-3)', dot: 'var(--text-3)' },
+      ok: { bg: 'var(--ok-bg)', fg: 'var(--ok-fg)', dot: 'var(--ok)' },
+      warn: { bg: 'var(--warn-bg)', fg: 'var(--warn-fg)', dot: 'var(--warn)' },
+      danger: { bg: 'var(--danger-bg)', fg: 'var(--danger-fg)', dot: 'var(--danger)' },
+      accent: { bg: 'var(--accent-subtle)', fg: 'var(--accent-text)', dot: 'var(--accent)' },
+      neutral: { bg: 'var(--bg-subtle)', fg: 'var(--text-2)', dot: 'var(--text-3)' },
+    };
+    return m[t] || m.neutral;
+  }
+  renderVals() {
+    const p = this.props;
+    const columns = p.columns || [];
+    const rows = p.rows || [];
+    const selectable = !!p.selectable;
+    const ids = rows.map((r, i) => (r.id != null ? r.id : i));
+    const sel = this.state.sel;
+    const allSelected = ids.length > 0 && ids.every(id => sel.includes(id));
+
+    const align = (a) => a === 'right' ? 'justify-content: flex-end; text-align: right;' : (a === 'center' ? 'justify-content: center; text-align: center;' : 'justify-content: flex-start;');
+
+    const gridCols = [];
+    if (selectable) gridCols.push('40px');
+    columns.forEach(c => gridCols.push(c.width || '1fr'));
+
+    const headCells = columns.map(c => ({
+      label: c.label,
+      style: `display: flex; align-items: center; min-width: 0; ${align(c.align)}`,
+    }));
+
+    const toggle = (id) => this.setState(s => ({ sel: s.sel.includes(id) ? s.sel.filter(x => x !== id) : [...s.sel, id] }));
+
+    const rowsView = rows.map((r, i) => {
+      const id = ids[i];
+      const checked = sel.includes(id);
+      const cells = columns.map(c => {
+        const raw = r[c.key];
+        const wrapStyle = `display: flex; align-items: center; gap: 10px; min-width: 0; ${align(c.align)}`;
+        if (c.type === 'badge') {
+          const tone = (raw && raw.tone) ? raw.tone : raw;
+          const tm = this.toneMap(tone);
+          return { isBadge: true, wrapStyle, text: (raw && raw.label) ? raw.label : (tm.ko || raw), bg: tm.bg, fg: tm.fg, dot: tm.dot };
+        }
+        if (c.type === 'avatar') {
+          const name = (raw && raw.name) ? raw.name : raw;
+          const h = this.hue(name);
+          return { isAvatar: true, wrapStyle, text: name, initial: (name || '?').slice(0, 1), avStyle: `display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; font-size: 11px; font-weight: 700; flex-shrink: 0; background: oklch(0.93 0.035 ${h}); color: oklch(0.42 0.09 ${h});` };
+        }
+        if (c.type === 'iconText') {
+          return { isIconText: true, wrapStyle, text: (raw && raw.text) ? raw.text : raw, glyph: (raw && raw.glyph) ? raw.glyph : (c.glyph || 'info') };
+        }
+        if (c.type === 'actions') {
+          return { isActions: true, wrapStyle, onAction: (e) => { if (e && e.stopPropagation) e.stopPropagation(); if (p.onAction) p.onAction(r); } };
+        }
+        const mono = c.type === 'mono';
+        return { isText: true, wrapStyle, text: raw == null ? '' : String(raw), color: c.muted ? 'var(--text-3)' : 'var(--text-1)', font: mono ? "font-family: 'IBM Plex Mono', monospace;" : (c.strong ? 'font-weight: 600;' : '') };
+      });
+      return {
+        checked, leftBar: checked,
+        cells,
+        rowStyle: `position: relative; display: grid; grid-template-columns: ${gridCols.join(' ')}; align-items: center; gap: 12px; padding: 0 16px; height: 60px; border-bottom: 1px solid var(--border); cursor: ${p.onRowClick ? 'pointer' : 'default'};`,
+        onClick: p.onRowClick ? (() => p.onRowClick(r)) : (() => {}),
+        onToggle: (e) => { if (e && e.stopPropagation) e.stopPropagation(); toggle(id); },
+      };
+    });
+
+    return {
+      selectable, allSelected,
+      gridTemplate: gridCols.join(' '),
+      headCells, rowsView,
+      onSelectAll: () => this.setState(s => ({ sel: allSelected ? [] : ids.slice() })),
+    };
+  }
+}
+</script>
+</body>
+</html>

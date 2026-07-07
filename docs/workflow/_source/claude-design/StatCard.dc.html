@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root {
+    --bg-surface: oklch(1 0 0); --bg-subtle: oklch(0.966 0.003 265); --border: oklch(0.918 0.004 265);
+    --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265);
+    --ok-bg: oklch(0.95 0.03 155); --ok-fg: oklch(0.44 0.08 155);
+  }
+  html[data-theme="dark"] {
+    --bg-surface: oklch(0.205 0.005 265); --bg-subtle: oklch(0.242 0.006 265); --border: oklch(0.29 0.007 265);
+    --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265);
+    --ok-bg: oklch(0.31 0.05 155); --ok-fg: oklch(0.84 0.1 155);
+  }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 19px; font-family: 'IBM Plex Sans KR', sans-serif;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+    <span style="font-size: 13px; color: var(--text-2); font-weight: 500;">{{ label }}</span>
+    <sc-if value="{{ showIcon }}"><span style="width: 30px; height: 30px; border-radius: 8px; background: var(--bg-subtle); color: var(--text-2); display: grid; place-items: center;"><ds-icon glyph="{{ glyph }}" size="16"></ds-icon></span></sc-if>
+  </div>
+  <div style="font-size: 27px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: var(--text-1);">{{ value }}</div>
+  <sc-if value="{{ hasDelta }}">
+    <div style="display: flex; align-items: center; gap: 6px; margin-top: 11px;">
+      <span style="font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 6px; {{ deltaStyle }}">{{ delta }}</span>
+      <span style="font-size: 12px; color: var(--text-3);">{{ sub }}</span>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 260, &quot;height&quot;: 120}, &quot;label&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;총 에셋&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;value&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;12,480&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;glyph&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;image&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;delta&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;+4.2%&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;deltaUp&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;sub&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;지난달 대비&quot;, &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const delta = p.delta ?? '';
+    const up = p.deltaUp !== false && p.deltaUp !== 'false';
+    return {
+      label: p.label ?? '지표',
+      value: p.value ?? '0',
+      glyph: p.glyph ?? '',
+      showIcon: !!p.glyph,
+      delta, sub: p.sub ?? '',
+      hasDelta: !!delta,
+      deltaStyle: up ? 'background: var(--ok-bg); color: var(--ok-fg);' : 'background: var(--bg-subtle); color: var(--text-2);',
+    };
+  }
+}
+</script>
+</body>
+</html>

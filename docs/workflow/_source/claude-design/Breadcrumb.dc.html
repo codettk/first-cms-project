@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="ds-icons.js"></script>
+<style>
+  :root { --text-1: oklch(0.245 0.012 265); --text-2: oklch(0.47 0.01 265); --text-3: oklch(0.63 0.008 265); }
+  html[data-theme="dark"] { --text-1: oklch(0.96 0.003 265); --text-2: oklch(0.72 0.008 265); --text-3: oklch(0.55 0.008 265); }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<nav style="display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Sans KR', sans-serif; min-width: 0;">
+  <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="3">
+    <sc-if value="{{ c.showSep }}"><span style="color: var(--text-3); display: flex; flex-shrink: 0;"><ds-icon glyph="chevronRight" size="15"></ds-icon></span></sc-if>
+    <span onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</span>
+  </sc-for>
+</nav>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 360, &quot;height&quot;: 44}, &quot;items&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;(string|object)[]&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const raw = p.items || [];
+    const items = raw.map(t => (typeof t === 'string' ? { label: t } : t));
+    return {
+      crumbs: items.map((it, i) => {
+        const last = i === items.length - 1;
+        return {
+          label: it.label,
+          showSep: i > 0,
+          style: `font-size: ${last ? '14px' : '13.5px'}; white-space: nowrap; ${last ? 'font-weight: 600; color: var(--text-1);' : 'color: var(--text-3); cursor: pointer;'}`,
+          onClick: (!last && it.onClick) ? it.onClick : (() => {}),
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

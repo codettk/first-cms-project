@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 9px; line-height: 1.5; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; overflow-x: auto; }
+  doc-page .muted { color: #6b7080; }
+  doc-page .lo { color: #2c6e49; font-weight: 700; }
+  doc-page .md { color: #8a6d1a; font-weight: 700; }
+  doc-page .hi { color: #b23a3a; font-weight: 700; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Workflow Admin UI Wireframe Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Workflow Admin UI Wireframe Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">워크플로우 관리자 화면 와이어프레임 설계서 — 운영 콘솔 설계 기준</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: Job Type Definition · DB Table Spec · Queue &amp; Worker Spec · State Machine Spec (각 v1.0)</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>본 문서는 워크플로우 관리자 화면의 정보 구조·화면별 구성·수동 조작 정책·API·권한을 정의한다. 이 화면은 단순 목록이 아니라 <b>운영 콘솔</b>이다 — 업로드된 미디어가 지금 어떤 처리 단계에 있는지, 어떤 Job이 왜 실패했는지, 어떤 Worker가 동작 중인지 즉시 파악하고, 재시도·취소·Lock 회수·Worker 비활성화 같은 조치를 안전하게(상태 기계 검증 + 감사 로그) 수행하는 것이 목적이다. UI는 Frame CMS 디자인 시스템을 사용한다.</p>
+
+  <h2>2. 관리자 화면 전체 정보 구조 (IA)</h2>
+  <table>
+    <tr><th style="width: 165px;">메뉴</th><th>목적</th><th style="width: 130px;">주요 사용자</th></tr>
+    <tr><td>워크플로우 대시보드</td><td>전체 상태 요약 — 이상 징후 감지의 시작점</td><td>운영자 전원</td></tr>
+    <tr><td>콘텐츠 처리 현황</td><td>콘텐츠 단위 처리 상태 목록·필터</td><td>운영자, 콘텐츠 관리자</td></tr>
+    <tr><td>콘텐츠 처리 상세</td><td>단일 콘텐츠의 파이프라인 타임라인·rendition·조작</td><td>운영자</td></tr>
+    <tr><td>Job 큐 현황</td><td>READY/RETRY 대기열 감시·우선순위 조정</td><td>시스템 운영자</td></tr>
+    <tr><td>RUNNING Job</td><td>실행 중 작업 진행률·타임아웃 임박 감시</td><td>시스템 운영자</td></tr>
+    <tr><td>실패 Job</td><td>FAILED/TIMEOUT 조치(재시도·원인 분석)</td><td>운영자</td></tr>
+    <tr><td>Worker 상태</td><td>Worker 헬스·용량·비활성화 관리</td><td>시스템 운영자, 인프라</td></tr>
+    <tr><td>Job 로그</td><td>history + logs 통합 상세 — 장애 분석</td><td>개발자, 운영자</td></tr>
+    <tr><td>시스템 알림 / 운영 이벤트</td><td>알림 이력·확인 처리</td><td>운영자 전원</td></tr>
+  </table>
+  <p class="muted">내비게이션: 좌측 사이드바 "워크플로우" 그룹 하위 9개 메뉴. 대시보드의 모든 숫자는 해당 목록 화면으로 딥링크된다(필터 프리셋 포함).</p>
+
+  <h2>3. 워크플로우 대시보드</h2>
+  <ul>
+    <li><b>1행 — 경고 배너</b> (조건부): Worker OFFLINE/ERROR, 필수 실패, 큐 임계 초과 시 최상단 빨간/주황 배너. 없으면 미표시.</li>
+    <li><b>2행 — 콘텐츠 카드 3장</b>: 처리 중(PROCESSING) / READY / FAILED — FAILED &gt; 0이면 카드 자체를 danger 스타일로.</li>
+    <li><b>3행 — Job 상태 카드 6장</b>: WAITING · READY · RUNNING · RETRY · FAILED · TIMEOUT (건수 + 전 시간 대비 증감).</li>
+    <li><b>4행 — 좌: 처리량 그래프</b> (최근 24h, 시간당 SUCCESS 건수 막대 + 실패 건수 라인) / <b>우: Worker 요약</b> (ONLINE/BUSY/OFFLINE/ERROR 도넛 + 목록 상위 5).</li>
+    <li><b>5행 — 운영 지표 스트립</b>: TC Queue Length · 평균 처리 시간(p50/p95) · 실패율 · 재시도율 · 최근 1시간 처리량 — 임계 초과 값은 주황/빨강 강조.</li>
+    <li>새로고침: 10초 자동 폴링 + 수동 버튼. 모든 카드는 클릭 시 필터된 목록으로 이동.</li>
+  </ul>
+
+  <h2>4. 콘텐츠 처리 현황 목록</h2>
+  <p><b>컬럼</b>: ID · 썸네일+제목 · 미디어 유형 · 콘텐츠 상태 뱃지 · 현재 단계(RUNNING 중 job_type) · 전체 진행률(완료 필수 job ÷ 전체 필수 job) · 실패 뱃지 · Proxy ✓ · Thumbnail ✓ · INDEX 상태 · PUBLISH 상태 · 업로드자 · 등록일 · 마지막 업데이트 · 액션(⋯ 메뉴).</p>
+  <p><b>필터</b>: 콘텐츠 상태(멀티) · 미디어 유형 · 실패만 보기 토글 · 처리 기간(범위) · 업로드자 · 현재 Job 단계 · Worker 유형 · 검색어(제목/파일명/ID). 자주 쓰는 조합은 프리셋 저장.</p>
+  <p><b>액션</b>: 상세 보기 · 실패 지점부터 재처리 · 전체 재처리 · PUBLISH 재시도 · 콘텐츠 취소 · 로그 보기 — 노출 조건은 §11 정책을 따른다.</p>
+
+  <h2>5. 콘텐츠 처리 상세 화면</h2>
+  <ul>
+    <li><b>상단 헤더</b>: 썸네일 · 제목 · 콘텐츠 상태 뱃지 · media_type · 업로드자/등록일 · 주요 액션 버튼(재처리·취소·로그).</li>
+    <li><b>좌측 컬럼</b>: 원본 파일 정보(파일명·크기·checksum·detected_mime — <b>다운로드 링크 없음</b>, 권한자용 별도 요청 버튼만) · Master rendition(경로 마스킹, zone 뱃지 🔒) · Proxy/Thumbnail/Catalog rendition 목록(미리보기 가능) · Search Index 상태.</li>
+    <li><b>우측 메인</b>: Workflow Instance 정보(템플릿·버전·시작/종료) → <b>Job Pipeline Timeline</b> → Job별 상태 목록(테이블) → 최근 로그 10건.</li>
+    <li><b>Pipeline Timeline</b>: TM → VERIFY → MA → [TC | IMAGE_TC | AUDIO_TC | DOC_PREVIEW] → [CA | OCR | TEXT_EXTRACT] → INDEX → PUBLISH → CLEANUP 을 가로 스텝 UI로. 각 박스: job_type · 상태 뱃지 · 시작/종료 시각 · 소요 시간 · Worker 이름 · retry_count(&gt;0이면 뱃지) · 진행률 바(RUNNING) · 실패 사유 1줄 · [로그] 버튼. SKIPPED는 점선 박스, 실패 전파 SKIPPED는 점선+빨간 테두리.</li>
+    <li><b>실패 사유 패널</b>: 실패 job이 있으면 타임라인 아래 danger 카드로 fail_reason_code + 사용자용 설명 + 조치 제안(예: "손상 파일 — 재업로드 필요").</li>
+  </ul>
+
+  <h2>6. Job 큐 현황 화면</h2>
+  <p><b>컬럼</b>: job_id · content(썸네일+ID) · job_type · priority(편집 가능) · status(READY/RETRY) · next_attempt_at · retry_count/max_retry · created_at · 대기 시간(강조: &gt; 10분 주황) · 예상 Worker 유형 · 액션.</p>
+  <p><b>필터</b>: job_type · status · priority 범위 · retry_count ≥ N · next_attempt_at 도래 여부 · 대기 시간 ≥ N분 · content_id.</p>
+  <p><b>액션</b>: 우선순위 변경(인라인 셀렉트) · 수동 실행 예약(next_attempt_at=now) · 취소 · 상세 보기. 상단에 job_type별 대기 건수 미니 카드.</p>
+
+  <h2>7. RUNNING Job 화면</h2>
+  <p><b>컬럼</b>: job_id · content · job_type · Worker(링크) · 진행률 바(%+message) · 남은 예상 시간 · started_at · 경과 시간 · timeout_sec · <b>타임아웃 임박</b>(경과 &gt; 80% 주황 / &gt; 95% 빨강 점멸) · locked_until · heartbeat_at(지연 시 경고) · 액션.</p>
+  <p><b>장시간 작업 진행률</b>: TC는 ffmpeg out_time 기반 %를 진행률 바 + "00:12:30 / 00:41:00" 형태의 시간 병기로, DOC_PREVIEW/OCR은 "37 / 120 페이지"로 표시 — 운영자가 '멈춘 것인지 느린 것인지'를 판별할 수 있게 <b>진행률 마지막 갱신 시각</b>을 함께 표시하고 2분 이상 미갱신이면 stall 경고 아이콘.</p>
+  <p><b>액션</b>: 로그 보기 · Job 취소 요청 · Lock 강제 회수 · Worker 상세 보기.</p>
+
+  <h2>8. 실패 Job 화면</h2>
+  <p><b>컬럼</b>: 선택 체크박스 · job_id · content · job_type · is_required(<b>영향도 뱃지</b>) · fail_reason_code · 실패 메시지(1줄, 전체는 툴팁) · retry_count/max_retry · 마지막 Worker · failed_at · 액션.</p>
+  <p><b>영향도 표시</b>: <span class="hi">필수 실패</span> — "콘텐츠 FAILED · PUBLISH 차단" 빨간 뱃지 / <span class="md">선택 실패</span> — "READY 가능 · 경고" 주황 뱃지. 기본 정렬은 필수 실패 우선.</p>
+  <p><b>액션</b>: 단건 재시도 · 선택 일괄 재시도(같은 fail_reason끼리 권장 경고) · 실패 사유 보기(모달: code·메시지·마지막 stderr 발췌) · 로그 보기 · 콘텐츠 상세 · 후속 SKIPPED 목록 보기(어떤 job이 전파로 생략됐는지).</p>
+
+  <h2>9. Worker 상태 대시보드</h2>
+  <p><b>컬럼</b>: worker_id · worker_name · worker_type · 상태 뱃지 · supported_job_types(칩) · hostname · ip · last_heartbeat_at · <b>heartbeat delay</b>(30초↑ 주황, 90초↑ 빨강) · current_job(링크) · max_concurrency(사용/전체) · GPU ✓ · cpu/mem · version · 액션.</p>
+  <p><b>액션</b>: 비활성화(drain) · 재활성화 · ERROR 해제 · 현재 Job 보기 · Worker 로그 보기.</p>
+  <table>
+    <tr><th style="width: 110px;">Worker 상태</th><th style="width: 150px;">뱃지 색</th><th>의미</th></tr>
+    <tr><td>ONLINE</td><td>초록 (ok)</td><td>정상 — Claim 가능</td></tr>
+    <tr><td>BUSY</td><td>파랑 (accent)</td><td>실행 중 — 정상</td></tr>
+    <tr><td>OFFLINE</td><td>빨강 (danger) + 행 강조</td><td>heartbeat 유실 — 즉시 확인</td></tr>
+    <tr><td>ERROR</td><td>빨강 (danger)</td><td>오류 상태 — 운영자 해제 필요</td></tr>
+    <tr><td>DISABLED</td><td>회색 (neutral)</td><td>의도적 비활성 — 경고 아님</td></tr>
+  </table>
+
+  <h2>10. Job 로그 상세 화면</h2>
+  <ul>
+    <li><b>상단</b>: Job 기본 정보 카드 — job_id·type·상태·content 링크·worker·retry_count·payload 요약.</li>
+    <li><b>좌측 — 상태 전이 타임라인 (histories)</b>: 세로 타임라인. 각 노드 = from→to 뱃지 · actor · note · 시각 · 구간 소요. <b>"무슨 일이 있었나"</b>를 답한다.</li>
+    <li><b>우측 — 실행 로그 (logs)</b>: attempt 탭(1차/2차/…) → command(복사 버튼) · stdout/stderr(접이식, 모노스페이스, 검색) · message · detail JSON(트리 뷰). <b>"왜 그랬나"</b>를 답한다.</li>
+    <li><b>하단</b>: 생성된 rendition 목록(type·zone·크기·미리보기) · 실패 사유 카드 · 관리자 조작 이력(histories 중 actor=admin 필터 뷰).</li>
+    <li>history와 log의 구분은 화면에서 "타임라인(상태)" / "실행 로그(상세)" 두 패널 제목으로 명시하고, 타임라인 노드 클릭 시 해당 시각의 로그로 스크롤 동기화.</li>
+  </ul>
+
+  <h2>11. 수동 조작 UI 정책</h2>
+  <table>
+    <tr><th style="width: 120px;">액션</th><th style="width: 105px;">가능한 상태</th><th style="width: 90px;">확인 모달</th><th style="width: 75px;">사유 필수</th><th style="width: 175px;">실행 후 상태</th><th style="width: 60px;">위험도</th></tr>
+    <tr><td>실패 Job 재시도</td><td>jobs=FAILED</td><td>단건 X / 일괄 O</td><td>X</td><td>FAILED→RETRY (count=0)</td><td class="lo">LOW</td></tr>
+    <tr><td>READY Job 취소</td><td>jobs=WAITING/READY</td><td>O</td><td>O</td><td>→CANCELED + 후속 SKIPPED</td><td class="md">MED</td></tr>
+    <tr><td>RUNNING Job 취소</td><td>jobs=RUNNING</td><td>O</td><td>O</td><td>cancel 신호→CANCELED</td><td class="md">MED</td></tr>
+    <tr><td>Lock 강제 회수</td><td>RUNNING+lock 존재</td><td>O (경고문)</td><td>O</td><td>RUNNING→RETRY, lock 삭제</td><td class="hi">HIGH</td></tr>
+    <tr><td>콘텐츠 재처리</td><td>contents=READY</td><td>O</td><td>O</td><td>READY→PROCESSING + 새 인스턴스</td><td class="md">MED</td></tr>
+    <tr><td>FAILED 해제 후 재처리</td><td>contents=FAILED</td><td>O</td><td>O</td><td>FAILED→PROCESSING + 새 인스턴스</td><td class="md">MED</td></tr>
+    <tr><td>PUBLISH 재시도</td><td>PUBLISH job=FAILED</td><td>O</td><td>X</td><td>PUBLISH FAILED→RETRY</td><td class="lo">LOW</td></tr>
+    <tr><td>우선순위 변경</td><td>jobs=WAITING/READY/RETRY</td><td>X</td><td>X</td><td>priority 갱신</td><td class="lo">LOW</td></tr>
+    <tr><td>Worker 비활성화</td><td>agents=ONLINE/BUSY</td><td>O</td><td>O</td><td>→DISABLED (drain)</td><td class="md">MED</td></tr>
+    <tr><td>Worker ERROR 해제</td><td>agents=ERROR</td><td>O</td><td>O</td><td>ERROR→ONLINE</td><td class="hi">HIGH</td></tr>
+  </table>
+  <p class="muted">모든 조작은 감사 로그 기록(actor=admin:{user_id} + note). 버튼은 "가능한 상태"에서만 노출(비활성화가 아니라 미노출) — 상태 기계가 거부할 조작을 UI에 보여주지 않는다. HIGH 액션 모달에는 결과 경고문 + 사유 입력 + 확인 문구 타이핑(예: 회수할 job_id 입력)을 요구한다.</p>
+
+  <h2>12. 상태 뱃지와 색상 정책</h2>
+  <p>Frame CMS 디자인 시스템 토큰 기준: <code>ok</code>(초록) / <code>accent</code>(파랑) / <code>warn</code>(주황) / <code>danger</code>(빨강) / <code>neutral</code>(회색).</p>
+  <table>
+    <tr><th style="width: 130px;">대상</th><th style="width: 105px;">상태</th><th style="width: 95px;">색</th><th>안내 문구</th></tr>
+    <tr><td rowspan="7">contents</td><td>UPLOADING</td><td>파랑</td><td>업로드 중</td></tr>
+    <tr><td>REGISTERED</td><td>회색</td><td>등록됨 — 처리 대기</td></tr>
+    <tr><td>PROCESSING</td><td>파랑(펄스)</td><td>워크플로우 처리 중</td></tr>
+    <tr><td>READY</td><td>초록</td><td>서비스 가능</td></tr>
+    <tr><td>FAILED</td><td>빨강</td><td>처리 실패 — 조치 필요</td></tr>
+    <tr><td>ARCHIVED</td><td>회색</td><td>보관됨</td></tr>
+    <tr><td>DELETED</td><td>회색(취소선)</td><td>삭제됨</td></tr>
+    <tr><td rowspan="9">workflow_jobs</td><td>WAITING</td><td>회색</td><td>선행 작업 대기</td></tr>
+    <tr><td>READY</td><td>파랑(연함)</td><td>실행 대기</td></tr>
+    <tr><td>RUNNING</td><td>파랑(펄스)</td><td>실행 중</td></tr>
+    <tr><td>SUCCESS</td><td>초록</td><td>성공</td></tr>
+    <tr><td>FAILED</td><td>빨강</td><td>실패 — 상세 확인</td></tr>
+    <tr><td>RETRY</td><td>주황</td><td>재시도 대기</td></tr>
+    <tr><td>SKIPPED</td><td>회색(점선)</td><td>조건에 의해 생략</td></tr>
+    <tr><td>CANCELED</td><td>회색</td><td>취소됨</td></tr>
+    <tr><td>TIMEOUT</td><td>빨강</td><td>시간 초과</td></tr>
+    <tr><td rowspan="5">worker_agents</td><td>ONLINE</td><td>초록</td><td>정상</td></tr>
+    <tr><td>BUSY</td><td>파랑</td><td>작업 중</td></tr>
+    <tr><td>OFFLINE</td><td>빨강</td><td>연결 끊김 — 확인 필요</td></tr>
+    <tr><td>DISABLED</td><td>회색</td><td>비활성화됨</td></tr>
+    <tr><td>ERROR</td><td>빨강</td><td>Worker 오류 — 해제 필요</td></tr>
+    <tr><td rowspan="4">search_index</td><td>PENDING</td><td>회색</td><td>색인 대기</td></tr>
+    <tr><td>INDEXED</td><td>초록</td><td>색인 완료</td></tr>
+    <tr><td>STALE</td><td>주황</td><td>재색인 필요</td></tr>
+    <tr><td>FAILED</td><td>빨강</td><td>색인 실패</td></tr>
+  </table>
+
+  <h2>13. 관리자 알림 정책</h2>
+  <table>
+    <tr><th style="width: 155px;">이벤트</th><th style="width: 65px;">심각도</th><th style="width: 130px;">표시 위치</th><th>메시지 / 조치 버튼</th></tr>
+    <tr><td>필수 Job 최종 실패</td><td class="hi">HIGH</td><td>배너 + 알림센터 + 이메일</td><td>"{콘텐츠} {job_type} 실패 — 콘텐츠 처리 중단" · [상세 보기] [재시도]</td></tr>
+    <tr><td>Worker OFFLINE</td><td class="hi">HIGH</td><td>배너 + 알림센터</td><td>"{worker} 연결 끊김 (90초)" · [Worker 상태]</td></tr>
+    <tr><td>Worker ERROR</td><td class="hi">HIGH</td><td>배너 + 알림센터</td><td>"{worker} 오류 상태 전환" · [로그] [해제]</td></tr>
+    <tr><td>TC Queue 임계 초과</td><td class="md">MED</td><td>대시보드 경고 + 알림센터</td><td>"TC 대기 {n}건 (임계 {t})" · [큐 보기]</td></tr>
+    <tr><td>TIMEOUT 발생</td><td class="md">MED</td><td>알림센터</td><td>"{job} 시간 초과 — 재시도 예약" · [상세]</td></tr>
+    <tr><td>Lock 만료 회수</td><td class="md">MED</td><td>알림센터</td><td>"{job} lease 만료 회수 — Worker 점검 권장" · [Worker]</td></tr>
+    <tr><td>Storage I/O 오류</td><td class="hi">HIGH</td><td>배너 + 이메일</td><td>"스토리지 오류 감지 ({zone})" · [실패 목록]</td></tr>
+    <tr><td>Search Index 실패</td><td class="md">MED</td><td>알림센터, 30분 지속 시 배너</td><td>"색인 실패 {n}건" · [색인 상태]</td></tr>
+    <tr><td>PUBLISH 실패</td><td class="hi">HIGH</td><td>배너 + 알림센터</td><td>"{콘텐츠} 게시 실패 — {사유}" · [상세]</td></tr>
+    <tr><td>Master rendition 누락</td><td class="hi">HIGH</td><td>배너 + 이메일</td><td>"원본 무결성 오류 — 즉시 확인" · [상세]</td></tr>
+    <tr><td>Thumbnail 누락</td><td class="md">MED</td><td>알림센터</td><td>"{콘텐츠} 썸네일 누락" · [CA 재실행]</td></tr>
+  </table>
+
+  <h2>14. 화면별 API 요구사항</h2>
+  <table>
+    <tr><th style="width: 330px;">API</th><th>목적</th><th style="width: 145px;">권한</th></tr>
+    <tr><td><code>GET /admin/workflows/dashboard</code></td><td>대시보드 지표 집계</td><td>workflow.view</td></tr>
+    <tr><td><code>GET /admin/workflows/contents</code></td><td>콘텐츠 처리 목록 (필터·페이지)</td><td>workflow.view</td></tr>
+    <tr><td><code>GET /admin/workflows/contents/{id}</code></td><td>상세 — 인스턴스·job·rendition·인덱스</td><td>workflow.view</td></tr>
+    <tr><td><code>POST /admin/workflows/contents/{id}/reprocess</code></td><td>재처리 (mode=failed_from|full)</td><td>workflow.reprocess</td></tr>
+    <tr><td><code>POST /admin/workflows/contents/{id}/cancel</code></td><td>콘텐츠 처리 취소</td><td>workflow.cancel</td></tr>
+    <tr><td><code>GET /admin/workflows/jobs</code></td><td>job 목록 (status·type 필터 — 큐/실행/실패 화면 공용)</td><td>workflow.view</td></tr>
+    <tr><td><code>GET /admin/workflows/jobs/{id}</code></td><td>job 상세 + histories + logs + renditions</td><td>workflow.logs.view</td></tr>
+    <tr><td><code>POST /admin/workflows/jobs/{id}/retry</code></td><td>FAILED→RETRY (단건/일괄)</td><td>workflow.retry</td></tr>
+    <tr><td><code>POST /admin/workflows/jobs/{id}/cancel</code></td><td>취소 (사유 body 필수)</td><td>workflow.cancel</td></tr>
+    <tr><td><code>POST /admin/workflows/jobs/{id}/release-lock</code></td><td>Lock 강제 회수</td><td>workflow.release_lock</td></tr>
+    <tr><td><code>PATCH /admin/workflows/jobs/{id}/priority</code></td><td>우선순위 변경</td><td>workflow.retry</td></tr>
+    <tr><td><code>GET /admin/workflows/workers</code></td><td>Worker 목록·헬스</td><td>workflow.view</td></tr>
+    <tr><td><code>POST /admin/workflows/workers/{id}/disable</code> / <code>enable</code></td><td>비활성화(drain)/재활성화</td><td>workflow.worker.manage</td></tr>
+    <tr><td><code>POST /admin/workflows/workers/{id}/clear-error</code></td><td>ERROR 해제</td><td>workflow.worker.manage</td></tr>
+    <tr><td><code>GET /admin/workflows/alerts</code> · <code>POST …/{id}/ack</code></td><td>알림 목록·확인 처리</td><td>workflow.view</td></tr>
+  </table>
+  <p class="muted">모든 POST/PATCH는 감사 로그 미들웨어를 경유하며, 상태 기계 검증 실패 시 409 + 현재 상태를 반환한다(UI는 재조회 후 안내).</p>
+
+  <h2>15. 권한 정책</h2>
+  <table>
+    <tr><th style="width: 190px;">권한</th><th>범위</th><th style="width: 90px;">위험도</th></tr>
+    <tr><td><code>workflow.view</code></td><td>전체 조회 (대시보드·목록·상세)</td><td class="lo">LOW</td></tr>
+    <tr><td><code>workflow.logs.view</code></td><td>로그 상세 열람 (경로 등 내부 정보 포함)</td><td class="lo">LOW</td></tr>
+    <tr><td><code>workflow.retry</code></td><td>재시도·우선순위 변경</td><td class="lo">LOW</td></tr>
+    <tr><td><code>workflow.cancel</code></td><td>job·콘텐츠 취소</td><td class="md">MED</td></tr>
+    <tr><td><code>workflow.reprocess</code></td><td>콘텐츠 재처리</td><td class="md">MED</td></tr>
+    <tr><td><code>workflow.release_lock</code></td><td>Lock 강제 회수</td><td class="hi">HIGH</td></tr>
+    <tr><td><code>workflow.worker.manage</code></td><td>Worker 비활성화·ERROR 해제</td><td class="hi">HIGH</td></tr>
+    <tr><td><code>workflow.force_publish</code></td><td>PUBLISH 강제 (비상용 — 기본 미부여)</td><td class="hi">HIGH</td></tr>
+    <tr><td><code>content.master.download</code></td><td>원본 다운로드 (워크플로우 권한과 별개, 감사 로그 필수)</td><td class="hi">HIGH</td></tr>
+  </table>
+  <p>조회(view)와 조작 권한을 분리하고, HIGH 권한은 역할(Role)에 기본 포함하지 않는다 — 개별 부여 + 부여 이력 관리.</p>
+
+  <h2>16. 텍스트 기반 와이어프레임</h2>
+  <h3>16.1 워크플로우 대시보드</h3>
+  <pre>┌─────────────────────────────────────────────────────────────┐
+│ ⚠ tc-worker-02 OFFLINE (2분 전)              [Worker 상태 →] │
+├──────────────┬──────────────┬───────────────────────────────┤
+│ 처리 중  12   │ READY  1,204 │ FAILED  3  ⚠     [목록 →]     │
+├────┬────┬────┼────┬────┬────┴───────────────────────────────┤
+│WAIT│RDY │RUN │RTRY│FAIL│TIMEOUT   (Job 상태 카드 6장)        │
+│ 24 │ 8  │ 5  │ 2  │ 4  │ 0                                  │
+├────┴────┴────┴────┴────┴────┬──────────────────────────────┤
+│  처리량 그래프 (24h)          │  Worker 도넛 + 상위 5 목록    │
+│  ▂▃▅▇▅▃▂ …                  │  ● ONLINE 6  ● BUSY 3 …      │
+├─────────────────────────────┴──────────────────────────────┤
+│ TC Queue 14 │ 평균 4.2분(p95 18분) │ 실패율 1.2% │ 1h 132건  │
+└─────────────────────────────────────────────────────────────┘</pre>
+  <h3>16.2 콘텐츠 처리 현황 목록</h3>
+  <pre>[필터: 상태▾ 유형▾ 실패만☐ 기간▾ 업로드자▾ 단계▾ | 검색 ______ ] [프리셋▾]
+┌────┬──────────────┬────┬──────────┬────────┬─────┬───────┬────────┬────┐
+│ ID │ ▦ 제목        │유형│ 상태      │ 단계    │진행률│Proxy/썸│ INDEX  │ ⋯ │
+│1001│ video_001    │ 🎬 │ ●PROCESS │ TC 실행 │ 4/7 │ ✓ / ✓ │ PEND   │[⋯]│
+│1002│ poster.tiff  │ 🖼 │ ●READY   │ 완료    │ 7/7 │ ✓ / ✓ │ INDEXED│[⋯]│
+│1003│ intro.mov    │ 🎬 │ ●FAILED  │ VERIFY ✕│ 1/7 │ ✕ / ✕ │ —      │[⋯]│
+└────┴──────────────┴────┴──────────┴────────┴─────┴───────┴────────┴────┘
+⋯ 메뉴: 상세 / 실패 지점 재처리 / 전체 재처리 / PUBLISH 재시도 / 취소 / 로그</pre>
+  <h3>16.3 콘텐츠 처리 상세</h3>
+  <pre>┌ ▦ video_001.mov   ●PROCESSING  VIDEO  soyeon · 07-04 ┐[재처리][취소][로그]
+├─────────────┬────────────────────────────────────────────────────────┤
+│ 원본 정보    │  Instance #7001 · VIDEO_INGEST v3 · 시작 10:02          │
+│  8.1GB      │  ┌TM─┐→┌VERIFY┐→┌MA─┐→┌TC──────┐→┌CA─┐→┌INDEX┐→┌PUB┐  │
+│  SHA ab3f…  │  │ ✓ │ │  ✓   │ │ ✓ │ │▶ 62%   │ │ ⌛ │ │  ⌛  │ │ ⌛ │  │
+│ Master 🔒   │  └───┘ └──────┘ └───┘ └tc-w-01─┘ └───┘ └─────┘ └───┘  │
+│ Proxy  ✓720p│  RUNNING: TC — 00:12:30/00:41:00 · 남은 ~9분 · [로그]   │
+│ Thumb  ⌛   │ ────────────────────────────────────────────────────── │
+│ Index PEND  │  Job 목록 테이블 (type·상태·시각·소요·worker·retry·⋯)   │
+└─────────────┴──[최근 로그 10건]──────────────────────────────────────┘</pre>
+  <h3>16.4 RUNNING Job</h3>
+  <pre>[필터: type▾ worker▾ 임박만☐]                       자동 새로고침 10s ⟳
+┌──────┬──────┬──────┬─────────┬──────────────────┬───────┬─────┬────┐
+│job_id│유형  │Worker│ 진행률   │ 경과/타임아웃      │ 임박   │hb   │ ⋯  │
+│90007 │ TC   │tc-01 │▓▓▓░ 62% │ 12:30 / 41:00 최대│  —    │ 3s  │[⋯]│
+│90012 │ OCR  │ocr-01│ 37/120p │ 08:11 / 10:00 최대│ ⚠ 82% │ 2s  │[⋯]│
+│90013 │ DOC  │doc-01│ stall ⚠ │ 09:40 / 10:00 최대│ 🔴 97%│ 45s⚠│[⋯]│
+└──────┴──────┴──────┴─────────┴──────────────────┴───────┴─────┴────┘
+⋯: 로그 / 취소 요청 / Lock 회수(HIGH) / Worker 보기</pre>
+  <h3>16.5 실패 Job</h3>
+  <pre>[필터: type▾ 필수만☐ reason▾ 기간▾]        [선택 일괄 재시도 (3)]
+┌─☐─┬──────┬──────┬────────┬────────────────────┬──────┬────────┬────┐
+│ ☐ │job_id│유형  │ 영향도  │ fail_reason         │retry │failed  │ ⋯ │
+│ ☑ │90003 │VERIFY│🔴필수   │ PERMANENT_CORRUPT   │ 0/2  │ 10:04  │[⋯]│
+│ ☑ │90018 │ OCR  │🟠선택   │ ENGINE_TIMEOUT      │ 2/2  │ 11:31  │[⋯]│
+└───┴──────┴──────┴────────┴────────────────────┴──────┴────────┴────┘
+⋯: 재시도 / 사유 보기 / 로그 / 콘텐츠 상세 / 후속 SKIPPED 보기</pre>
+  <h3>16.6 Worker 상태</h3>
+  <pre>┌──────────┬──────────┬─────────┬──────┬────────┬─────────┬──────┬────┐
+│ name     │ type     │ 상태     │ hb   │ 현재job│ 동시     │ GPU  │ ⋯ │
+│ tc-w-01  │TRANSCODE │ ●BUSY   │ 3s   │ 90007  │ 1/2     │ ✓    │[⋯]│
+│ tc-w-02  │TRANSCODE │ ●OFFLINE│ 143s⚠│ —      │ 0/2     │ ✓    │[⋯]│
+│ gen-w-01 │ GENERAL  │ ●ONLINE │ 8s   │ —      │ 0/8     │ —    │[⋯]│
+└──────────┴──────────┴─────────┴──────┴────────┴─────────┴──────┴────┘
+⋯: 비활성화(drain) / 재활성화 / ERROR 해제 / 현재 Job / 로그</pre>
+  <h3>16.7 Job 로그 상세</h3>
+  <pre>┌ Job #90007 · TC · ●RUNNING · content 1001 · tc-w-01 · retry 0 ┐
+├── 상태 전이 타임라인 ──────────┬── 실행 로그 [attempt 1] ────────┤
+│ ● 생성 → WAITING   10:02:01   │ command: ffmpeg -i master/... ⧉ │
+│ ● WAITING → READY  10:02:05   │ ▸ stdout (1,204줄, 검색 🔍)     │
+│ │  scheduler                  │ ▸ stderr (12줄)                 │
+│ ● READY → RUNNING  10:02:07   │ message: transcoding 62%        │
+│    worker:3 · claimed         │ detail: { "profile": "720p" }   │
+├── 생성된 rendition ────────────┴── 관리자 조작 이력 ─────────────┤
+│ (아직 없음)                    │ (없음)                          │
+└───────────────────────────────┴─────────────────────────────────┘</pre>
+
+  <h2>17. 사용자 경험 기준</h2>
+  <ul>
+    <li><b>실패 원인 즉시 노출</b> — 실패 뱃지에서 1클릭 이내에 fail_reason + 사람이 읽을 설명 + 조치 제안이 보인다. 목록에서도 사유 1줄 표시.</li>
+    <li><b>필수/선택 실패 구분</b> — 색·뱃지·기본 정렬로 항상 구분. 선택 실패가 필수 실패처럼 보이면 안 된다.</li>
+    <li><b>조작 안전장치</b> — 위험도에 따라 확인 모달·사유 입력·확인 문구 타이핑(§11). 버튼은 상태 기계상 가능한 경우에만 노출.</li>
+    <li><b>RUNNING 감시성</b> — 진행률 + 마지막 갱신 시각 + 타임아웃 임박 표시로 "느림 vs 멈춤"을 구분 가능하게.</li>
+    <li><b>Worker OFFLINE 즉시 인지</b> — 전 화면 공통 상단 배너 + 대시보드 카드 강조.</li>
+    <li><b>Master 보호</b> — 화면 어디에도 원본 직접 링크를 노출하지 않는다. 경로는 마스킹, 다운로드는 <code>content.master.download</code> 권한 + 사유 입력 + 감사 로그를 거치는 별도 요청 플로우.</li>
+    <li><b>모든 조작에 사유</b> — MED 이상 액션은 사유 입력 필수, 조작 이력은 콘텐츠·job 상세에서 열람 가능.</li>
+    <li>시각·시간대는 서버 UTC 저장, 화면은 운영자 로컬 표기(툴팁에 UTC 병기).</li>
+  </ul>
+
+  <h2>18. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>관리자 화면 하이파이 목업</b> — 본 와이어프레임을 Frame CMS 디자인 시스템으로 구현한 인터랙티브 프로토타입 (대시보드 → 상세 → 로그 플로우)</li>
+    <li><b>관리자 API 상세 명세</b> — 요청/응답 스키마·에러 코드·페이지네이션</li>
+    <li><b>알림 채널 설계</b> — 이메일/웹훅/메신저 연동 기준</li>
+    <li><b>운영 Runbook</b> — 알림별 표준 대응 절차</li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

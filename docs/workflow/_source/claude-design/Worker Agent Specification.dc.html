@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; }
+  doc-page .muted { color: #6b7080; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Worker Agent Implementation Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Worker Agent Implementation Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">Worker Agent 구현 명세서 — Laravel PHP CLI Worker 프로세스 구현 기준</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: Queue &amp; Worker Spec · State Machine Spec · Migration &amp; Seed Spec (각 v1.0)</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>본 문서는 개발자가 <b>실제 Worker 프로세스와 13개 Job Handler를 구현</b>할 수 있도록 공통 실행 루프·Job Claim·Heartbeat/Lock 연장·진행률 기록·실패 처리·외부 도구 호출·산출물 저장 방식을 코드 수준으로 정의한다. Worker는 Laravel artisan 커맨드로 실행되는 장기 실행 PHP CLI 프로세스이며, supervisor가 관리한다.</p>
+
+  <h2>2. Worker Agent 전체 구조</h2>
+  <pre>WorkerProcess (artisan workflow:worker)
+ ├─ WorkerAgentService     등록·heartbeat·상태 관리 (agents 테이블)
+ ├─ AbstractWorker         공통 실행 루프 (§5) — claim → execute → finalize
+ │   ├─ JobClaimService    §6 Claim 트랜잭션
+ │   ├─ JobLockService     lease 연장·해제·fencing 검사 (§7)
+ │   ├─ JobStateMachine    상태 전이 검증 (State Machine Spec §16)
+ │   ├─ JobRetryPolicy     실패 분류 → RETRY/FAILED + 백오프 (§13)
+ │   ├─ JobProgressService progresses upsert (§11)
+ │   ├─ JobLogService      logs 기록 (§16)
+ │   ├─ MediaStorageService zone별 경로 해석·임시 파일·atomic rename (§15)
+ │   └─ RenditionService   media_renditions upsert (§12)
+ └─ HandlerRegistry → WorkflowJobHandler 구현체 13종 (§8~9)
+     TmJobHandler · VerifyJobHandler · MediaAnalyzeJobHandler ·
+     VideoTranscodeJobHandler · ImageTranscodeJobHandler · AudioTranscodeJobHandler ·
+     CatalogJobHandler · DocumentPreviewJobHandler · OcrJobHandler ·
+     TextExtractJobHandler · IndexJobHandler · PublishJobHandler · CleanupJobHandler</pre>
+
+  <h2>3. Worker 유형별 실행 방식</h2>
+  <table>
+    <tr><th style="width: 78px;">worker_type</th><th style="width: 118px;">supported_job_types</th><th style="width: 92px;">외부 도구</th><th style="width: 46px;">동시</th><th style="width: 74px;">CPU/GPU</th><th style="width: 105px;">Storage 접근</th><th>영향도 / 운영 주의</th></tr>
+    <tr><td>TM</td><td>TM</td><td>rsync/S3 SDK</td><td>2~4</td><td>I/O 중심</td><td>TEMP R, MASTER W</td><td>전 파이프라인 시작점 — 최소 2대. 대역폭 상한 주의</td></tr>
+    <tr><td>GENERAL</td><td>VERIFY, MA, PUBLISH, CLEANUP</td><td>ffprobe, ExifTool</td><td>4~8</td><td>CPU 低</td><td>MASTER R, TEMP W(삭제)</td><td>저비용 — 상태 전환 정체 방지용 여유 확보</td></tr>
+    <tr><td>TRANSCODE</td><td>TC</td><td>ffmpeg(+NVENC)</td><td>1~2</td><td>CPU 高/GPU</td><td>MASTER R, PROXY W</td><td>최대 병목 — GPU 노드 분리, 대용량 전용 풀</td></tr>
+    <tr><td>IMAGE</td><td>IMAGE_TC, CA</td><td>libvips</td><td>4</td><td>CPU 中</td><td>MASTER R, PROXY/THUMB/CATALOG W</td><td>대형 TIFF 메모리 스파이크 — vips 스트리밍 사용</td></tr>
+    <tr><td>AUDIO</td><td>AUDIO_TC, WAVEFORM</td><td>ffmpeg, audiowaveform</td><td>4</td><td>CPU 低</td><td>MASTER R, PROXY W</td><td>GENERAL과 통합 배치 가능</td></tr>
+    <tr><td>DOCUMENT</td><td>DOC_PREVIEW, TEXT_EXTRACT</td><td>LibreOffice, pdftoppm</td><td>2</td><td>CPU 中</td><td>MASTER R, DOCUMENT/THUMB W</td><td>LibreOffice 프로세스 격리·job마다 재기동</td></tr>
+    <tr><td>OCR</td><td>OCR</td><td>Tesseract</td><td>2</td><td>CPU 高</td><td>PROXY/DOCUMENT R</td><td>선택 작업 — 저우선 소화, 야간 확장</td></tr>
+    <tr><td>INDEX</td><td>INDEX</td><td>검색엔진 클라이언트</td><td>4</td><td>CPU 低</td><td>DB만 (파일 접근 불필요)</td><td>검색엔진 상태 종속 — 벌크 배치 조정</td></tr>
+  </table>
+
+  <h2>4. Worker 프로세스 부팅 흐름</h2>
+  <ol>
+    <li>설정 파일 로드 (§17) — <code>worker_name</code>·<code>worker_type</code>·<code>supported_job_types</code> 확인, 누락 시 즉시 종료(exit 1).</li>
+    <li><b>외부 도구 점검</b> — 지원 job_type에 필요한 바이너리 실행 확인: <code>ffmpeg -version</code>, <code>ffprobe -version</code>, <code>vips --version</code>, <code>soffice --version</code>, <code>tesseract --version</code>, 검색엔진 ping. 하나라도 실패 시 status=ERROR로 등록 후 종료.</li>
+    <li>Storage 접근 점검 — 각 zone 마운트 존재 + 쓰기 zone에 테스트 파일 write/delete.</li>
+    <li>PostgreSQL 연결 확인.</li>
+    <li><code>workflow_worker_agents</code> upsert (worker_name 기준 — hostname·ip·capacity·version 갱신).</li>
+    <li>status = ONLINE 전환 (WorkerStateMachine 경유).</li>
+    <li>heartbeat 루프 시작 (별도 타이머, 30초).</li>
+    <li>SIGTERM/SIGINT 핸들러 등록 (§14) → Job Claim 루프 진입 (§5).</li>
+  </ol>
+
+  <h2>5. 공통 Worker 실행 루프</h2>
+  <pre>// app/Console/Commands/WorkflowWorkerCommand.php → AbstractWorker::run()
+public function run(): int {
+  pcntl_async_signals(true);
+  pcntl_signal(SIGTERM, fn() => $this->shuttingDown = true);
+  pcntl_signal(SIGINT,  fn() => $this->shuttingDown = true);
+
+  while (! $this->shuttingDown) {
+    $me = $this->agents->refresh($this->workerId);          // 자신의 상태 재조회
+    if (in_array($me->status, [WorkerStatus::Disabled, WorkerStatus::Error])) {
+      $this->sleepWithJitter(); continue;                    // Claim 중단, 프로세스는 유지
+    }
+
+    $job = $this->claim->tryClaim($this->workerId, $this->supportedTypes);
+    if ($job === null) { $this->sleepWithJitter(); continue; }  // 2~5s + jitter
+
+    $this->locks->startHeartbeat($job->id, $this->workerId);    // 30s 타이머
+    try {
+      $result = $this->executeJob($job);                        // Handler 위임 (§8)
+      $result->success
+        ? $this->finalizeSuccess($job, $result)                 // SUCCESS + renditions
+        : $this->finalizeFailure($job, $result);                // RetryPolicy → RETRY/FAILED
+    } catch (LeaseLostException $e) {
+      $this->logs->warn($job, 'lease lost — result discarded'); // 결과 폐기 (§7)
+    } catch (Throwable $e) {
+      $this->finalizeFailure($job, JobResult::systemError($e));
+    } finally {
+      $this->locks->stopHeartbeat();
+      $this->locks->release($job->id, $this->workerId);         // lock DELETE (자기 소유만)
+      $this->agents->clearCurrentJob($this->workerId);          // current_job_id=null, BUSY→ONLINE
+    }
+  }
+  $this->agents->markOffline($this->workerId);                  // graceful shutdown (§14)
+  return 0;
+}</pre>
+
+  <h2>6. Job Claim 구현 (JobClaimService)</h2>
+  <pre>public function tryClaim(int $workerId, array $types): ?WorkflowJob {
+  // Claim은 최상위 트랜잭션 소유자 — 내부의 상태 전이·history는 이 트랜잭션에 참여
+  return DB::transaction(function () use ($workerId, $types) {
+    $row = DB::selectOne(
+      "SELECT id, status FROM workflow_jobs
+       WHERE status IN ('READY','RETRY')
+         AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+         AND job_type = ANY(?)
+       ORDER BY priority DESC, created_at ASC
+       LIMIT 1 FOR UPDATE SKIP LOCKED", ['{'.implode(',', $types).'}']);
+    if (! $row) return null;
+
+    DB::insert("INSERT INTO workflow_job_locks
+      (job_id, locked_by_worker_id, locked_until, heartbeat_at)
+      VALUES (?, ?, now() + interval '600 seconds', now())", [$row->id, $workerId]);
+
+    DB::update("UPDATE workflow_jobs SET status='RUNNING', worker_id=?,
+        started_at=now(),
+        retry_count = retry_count + CASE WHEN status='RETRY' THEN 1 ELSE 0 END,
+        updated_at=now()
+      WHERE id=?", [$workerId, $row->id]);
+
+    DB::insert("INSERT INTO workflow_job_histories (job_id, from_status, to_status, actor, note)
+      VALUES (?, ?, 'RUNNING', ?, 'claimed')", [$row->id, $row->status, "worker:$workerId"]);
+
+    DB::update("UPDATE workflow_worker_agents SET current_job_id=?, status='BUSY',
+      updated_at=now() WHERE id=?", [$row->id, $workerId]);
+
+    return WorkflowJob::findOrFail($row->id);
+  });
+}</pre>
+  <p class="muted"><code>retry_count</code>는 RETRY→RUNNING 재진입 시에만 증가(CASE). locks PK가 이중 lease를 DB 레벨에서 차단 — INSERT 충돌 시 트랜잭션 롤백 후 null 반환(정상 흐름).</p>
+
+  <h2>7. Heartbeat / Lock 연장 (JobLockService)</h2>
+  <pre>// 30초마다 (pcntl_alarm 또는 이벤트 루프 타이머)
+$rows = DB::update("UPDATE workflow_job_locks
+  SET heartbeat_at=now(), locked_until=now() + interval '600 seconds'
+  WHERE job_id=? AND locked_by_worker_id=?", [$jobId, $workerId]);
+DB::update("UPDATE workflow_worker_agents SET last_heartbeat_at=now() WHERE id=?", [$workerId]);
+
+if ($rows === 0) $this->consecutiveFailures++;   // lease 상실 or lock 회수됨
+else             $this->consecutiveFailures = 0;
+if ($this->consecutiveFailures >= 2) throw new LeaseLostException($jobId);</pre>
+  <ul>
+    <li>0 rows = lease 상실 — Scheduler가 회수했거나 DB 단절. 2회 연속이면 <b>실행 중단</b>: 외부 프로세스 kill, 결과 저장 금지, WARN 로그.</li>
+    <li>이후 모든 결과 기록(SUCCESS UPDATE, rendition upsert)은 <code>WHERE status='RUNNING' AND worker_id=:me</code> CAS — 0행이면 폐기(fencing).</li>
+  </ul>
+
+  <h2>8. Job Handler 인터페이스</h2>
+  <pre>interface WorkflowJobHandler {
+  public function supports(string $jobType): bool;
+  public function handle(WorkflowJob $job, JobExecutionContext $ctx): JobResult;
+  public function cancel(WorkflowJob $job): void;   // 외부 프로세스 kill + 부분 산출물 정리
+}
+
+final class JobExecutionContext {
+  public WorkflowJob $job;
+  public Content $content;
+  public ?MediaFile $mediaFile;
+  public array $payload;                 // job.payload
+  public WorkflowWorkerAgent $worker;
+  public MediaStorageService $storage;   // zone별 경로 해석
+  public JobLogService $logger;          // attempt 스코프 로거
+  public JobProgressService $progress;   // report(percent, message, etaSec)
+  public CancellationToken $cancelToken; // cancel_requested_at 폴링 + shutdown 플래그
+}
+
+final class JobResult {
+  public bool $success;
+  public array $resultData;              // job.result에 저장
+  public array $renditions;              // RenditionService가 upsert할 스펙 목록
+  public ?string $failReasonCode;
+  public ?string $failMessage;
+  public ?FailureType $failureType;      // §13 enum
+  public bool $retryable;
+  public array $logs;                    // 추가 기록할 로그 항목
+}</pre>
+
+  <h2>9. Job별 구현 상세</h2>
+  <table>
+    <tr><th style="width: 105px;">Handler</th><th>처리 절차 (실패 분류는 §13 코드 사용)</th></tr>
+    <tr><td>TM</td><td>① temp_path 존재 확인(없으면 USER_FILE_ERROR) ② Master 경로 생성: <code>master/{yyyy}/{mm}/{content_id}_{uuid8}.{ext}</code> ③ 임시 이름으로 복사 → checksum(SHA-256) 계산 ④ 업로드 checksum과 대조(불일치 STORAGE_ERROR) ⑤ atomic rename ⑥ MASTER rendition upsert ⑦ media_files 갱신</td></tr>
+    <tr><td>VERIFY</td><td>① MASTER rendition 조회 ② 존재·크기&gt;0·checksum 재계산 대조 ③ <code>file</code>/finfo로 실제 MIME 판정 → 허용 목록 대조 ④ 헤더 파싱(ffprobe/vips/pdfinfo)으로 손상 검사 ⑤ detected_mime 저장. 손상·비허용은 PERMANENT(재시도 불가)</td></tr>
+    <tr><td>MA</td><td>① ffprobe(-print_format json) / ExifTool 실행 ② media_type 확정(판별 불가 PERMANENT) ③ media_info jsonb 저장 ④ contents.media_type 갱신 ⑤ 유형별 필수 필드(코덱·해상도·길이) assert</td></tr>
+    <tr><td>TC</td><td>① transcode_profile 로드 → ffmpeg 명령 구성(인자 배열 — §10) ② 출력은 <code>{target}.tmp</code> ③ <code>-progress pipe:1</code> 파싱 → progress 갱신 ④ exit 0 + 출력 duration을 원본 대비 ±1s 검증 ⑤ atomic rename ⑥ PROXY_VIDEO rendition upsert(profile_id 포함)</td></tr>
+    <tr><td>IMAGE_TC</td><td>① vips로 디코딩(스트리밍) ② EXIF Orientation 픽셀 적용 ③ GPS 등 민감 EXIF 제거 ④ 최대 변 2048px 리사이즈 → WebP(기본)/JPG ⑤ PROXY_IMAGE rendition upsert</td></tr>
+    <tr><td>AUDIO_TC</td><td>① ffmpeg → AAC 128kbps(기본) ② duration ±0.5s 검증 ③ PROXY_AUDIO rendition upsert. WAVEFORM job은 audiowaveform으로 PNG+JSON 생성</td></tr>
+    <tr><td>CA</td><td>① 입력 = Proxy(원본 아님 — Master 접근 금지) ② 대표 썸네일 1건(영상: 5초 프레임, 짧으면 중간) ③ 카탈로그 N건(config timecodes) ④ THUMBNAIL·CATALOG upsert(timecode_ms 키). 대표 1건 실패는 실패, 카탈로그 부분 실패는 SUCCESS+WARN</td></tr>
+    <tr><td>DOC_PREVIEW</td><td>① PDF는 pdftoppm 직접, Office는 LibreOffice headless → PDF → 이미지 ② 페이지 상한(200p)까지 생성, 초과분 로그 ③ PAGE_PREVIEW upsert(page_no 키) ④ 1페이지 기반 THUMBNAIL 생성. 암호화 문서 PERMANENT</td></tr>
+    <tr><td>OCR</td><td>① 입력 = PAGE_PREVIEW 또는 PROXY_IMAGE ② Tesseract(ko+en) 페이지 단위 실행 ③ 텍스트+confidence를 OCR_TEXT rendition(파일) + result에 요약 저장 ④ search_index_states → STALE 마킹. 0자 추출도 SUCCESS</td></tr>
+    <tr><td>TEXT_EXTRACT</td><td>① pdftotext / DOCX·PPTX XML 파싱 ② EXTRACTED_TEXT rendition + char_count 저장 ③ char_count &lt; 50이면 result에 <code>needs_ocr=true</code> — Scheduler가 OCR 실행 조건 활성화</td></tr>
+    <tr><td>INDEX</td><td>① 메타데이터+media_info+추출 텍스트 취합 ② content_id를 문서 ID로 upsert 색인 ③ 색인 후 조회 검증 ④ search_index_states INDEXED·version+1. 엔진 오류 SEARCH_ENGINE_ERROR(재시도)</td></tr>
+    <tr><td>PUBLISH</td><td>① 필수 job 전체 SUCCESS 확인 ② 유형별 필수 rendition DB 행 + <b>스토리지 파일 실재(stat)</b> 확인 ③ contents PROCESSING→READY(CAS) ④ instance→SUCCESS — 단일 트랜잭션. 누락 시 REQUIRED_RENDITION_MISSING(재시도 안 함)</td></tr>
+    <tr><td>CLEANUP</td><td>① temp 파일 삭제(없으면 성공 간주) ② 중간 산출물(.tmp) 삭제 ③ progress 행 삭제 ④ media_files.temp_path=NULL. <b>MASTER zone은 어떤 경로도 삭제 금지</b>(경로 prefix assert)</td></tr>
+  </table>
+
+  <h2>10. 외부 도구 호출 정책</h2>
+  <ul>
+    <li>Laravel <code>Process</code> 파사드(Symfony Process 기반) 사용 — <b>쉘 문자열 금지, 인자 배열만</b>(command injection 원천 차단). 파일 경로는 storage 서비스가 해석한 절대 경로만 전달.</li>
+    <li>timeout = job.timeout_sec − 30s(정리 여유). 초과 시 프로세스 kill + EXTERNAL_TOOL_ERROR.</li>
+    <li>stdout/stderr 스트리밍 capture — 각 64KB 링버퍼 유지(진행률 파싱용은 라인 콜백). 전체 로그는 임시 파일로 받고 §16 정책으로 저장.</li>
+    <li>exit code ≠ 0 → stderr 마지막 20줄을 fail_message로. 도구별 알려진 코드는 fail_reason_code 매핑 테이블 관리.</li>
+    <li>cancel: CancellationToken 신호 시 SIGTERM → 5초 대기 → SIGKILL. LibreOffice는 프로세스 그룹 단위 kill.</li>
+    <li>임시 파일: <code>{zone}/.tmp/{job_id}/</code> 아래에만 생성 — job 종료 시(성공/실패 무관) 디렉터리 삭제.</li>
+  </ul>
+
+  <h2>11. 진행률 업데이트 (JobProgressService)</h2>
+  <pre>INSERT INTO workflow_job_progresses (job_id, progress_percent, progress_message,
+  estimated_remaining_sec, updated_at)
+VALUES (?, ?, ?, ?, now())
+ON CONFLICT (job_id) DO UPDATE SET progress_percent=EXCLUDED.progress_percent,
+  progress_message=EXCLUDED.progress_message,
+  estimated_remaining_sec=EXCLUDED.estimated_remaining_sec, updated_at=now();</pre>
+  <ul>
+    <li>스로틀: 마지막 갱신에서 2초 경과 또는 1%p 변화 시에만 UPDATE (서비스 내부 상태로 판단).</li>
+    <li>TC: <code>out_time_ms / duration_ms × 100</code>, ETA = 경과 × (100−p)/p. DOC_PREVIEW: 완료 페이지/전체. OCR: 완료 페이지/대상.</li>
+    <li>종결 시 Worker가 행 DELETE(§9 CLEANUP이 누락분 보강) — 100% 유지 대신 삭제를 표준으로 한다(RUNNING 화면 전용 데이터).</li>
+  </ul>
+
+  <h2>12. 산출물 저장 정책 (RenditionService)</h2>
+  <table>
+    <tr><th style="width: 118px;">rendition_type</th><th style="width: 82px;">생성 Job</th><th style="width: 78px;">zone</th><th>path 규칙 / 채우는 필드</th></tr>
+    <tr><td>MASTER</td><td>TM</td><td>MASTER</td><td><code>master/{yyyy}/{mm}/{cid}_{uuid8}.{ext}</code> — size·checksum·mime</td></tr>
+    <tr><td>PROXY_VIDEO</td><td>TC</td><td>PROXY</td><td><code>proxy/{yyyy}/{mm}/{cid}_{profile}.mp4</code> — w·h·duration_ms·profile_id</td></tr>
+    <tr><td>PROXY_IMAGE</td><td>IMAGE_TC</td><td>PROXY</td><td><code>proxy/{yyyy}/{mm}/{cid}_{profile}.webp</code> — w·h·profile_id</td></tr>
+    <tr><td>PROXY_AUDIO</td><td>AUDIO_TC</td><td>PROXY</td><td><code>proxy/{yyyy}/{mm}/{cid}_{profile}.m4a</code> — duration_ms·profile_id</td></tr>
+    <tr><td>THUMBNAIL</td><td>CA / DOC_PREVIEW</td><td>THUMBNAIL</td><td><code>thumb/{yyyy}/{mm}/{cid}.webp</code> — w·h</td></tr>
+    <tr><td>CATALOG</td><td>CA</td><td>CATALOG</td><td><code>catalog/{yyyy}/{mm}/{cid}_{timecode_ms}.webp</code> — timecode_ms 필수</td></tr>
+    <tr><td>PAGE_PREVIEW</td><td>DOC_PREVIEW</td><td>DOCUMENT</td><td><code>doc/{yyyy}/{mm}/{cid}_p{page_no}.webp</code> — page_no 필수</td></tr>
+    <tr><td>DOCUMENT_PREVIEW</td><td>DOC_PREVIEW</td><td>DOCUMENT</td><td><code>doc/{yyyy}/{mm}/{cid}_preview.pdf</code> (선택 산출)</td></tr>
+    <tr><td>WAVEFORM</td><td>WAVEFORM</td><td>PROXY</td><td><code>proxy/{yyyy}/{mm}/{cid}_wave.png</code> + metadata(JSON 경로)</td></tr>
+    <tr><td>OCR_TEXT</td><td>OCR</td><td>DOCUMENT</td><td><code>doc/{yyyy}/{mm}/{cid}_ocr.txt</code> — metadata(confidence·lang·페이지 매핑)</td></tr>
+    <tr><td>EXTRACTED_TEXT</td><td>TEXT_EXTRACT</td><td>DOCUMENT</td><td><code>doc/{yyyy}/{mm}/{cid}_text.txt</code> — metadata(char_count)</td></tr>
+  </table>
+  <p><b>다중 프록시 확장 — variant_key (확정)</b>: media_renditions의 unique는 variant_key 포함으로 확정되었다(Migration Spec §7). Worker는 rendition 생성 시 <b>profile_id와 variant_key를 함께 저장</b>한다. 참고 — 이전 제안 문구: 다중 화질 도입 시 <code>variant_key varchar(50) NOT NULL DEFAULT 'default'</code> 컬럼을 추가하고 unique를 <code>(content_id, rendition_type, variant_key, page_no|timecode_ms)</code>로 재구성한다 — variant_key는 profile code(<code>'720p'</code>, <code>'1080p'</code>)를 사용. 지금은 profile_id 기록만으로 충분하며 마이그레이션 경로만 확보해 둔다.</p>
+
+  <h2>13. 실패 분류와 재시도 (JobRetryPolicy)</h2>
+  <table>
+    <tr><th style="width: 128px;">FailureType</th><th style="width: 58px;">retry</th><th style="width: 165px;">대표 fail_reason_code</th><th style="width: 130px;">관리자 안내</th><th>콘텐츠 영향 / 알림</th></tr>
+    <tr><td>TRANSIENT</td><td>✓</td><td><code>NETWORK_ERROR</code>, <code>DB_CONN_LOST</code></td><td>일시적 오류 — 자동 재시도</td><td>max_retry 내 영향 없음 / 알림 없음</td></tr>
+    <tr><td>PERMANENT</td><td>✗</td><td><code>PERMANENT_CORRUPT</code>, <code>UNSUPPORTED_FORMAT</code>, <code>ENCRYPTED_DOC</code></td><td>파일 문제 — 재업로드 필요</td><td>필수면 즉시 FAILED / 즉시 알림</td></tr>
+    <tr><td>USER_FILE_ERROR</td><td>✗</td><td><code>TEMP_FILE_MISSING</code>, <code>SIZE_MISMATCH</code></td><td>업로드 파일 이상</td><td>필수면 FAILED / 알림 + 사용자 안내</td></tr>
+    <tr><td>SYSTEM_ERROR</td><td>✓</td><td><code>OOM</code>, <code>UNEXPECTED_EXCEPTION</code></td><td>시스템 오류 — 확인 필요</td><td>재시도, 3연속 시 Worker ERROR / 알림</td></tr>
+    <tr><td>WORKER_ERROR</td><td>✓</td><td><code>LEASE_EXPIRED</code>, <code>WORKER_CRASH</code></td><td>Worker 장애 — 자동 재배정</td><td>영향 없음 / 반복 시 알림</td></tr>
+    <tr><td>STORAGE_ERROR</td><td>✓</td><td><code>STORAGE_IO</code>, <code>DISK_FULL</code>, <code>CHECKSUM_MISMATCH</code></td><td>스토리지 점검 필요</td><td>재시도 / <b>즉시 알림</b>(전역 장애 가능)</td></tr>
+    <tr><td>EXTERNAL_TOOL_ERROR</td><td>✓(2회)</td><td><code>FFMPEG_FAILED</code>, <code>SOFFICE_CRASH</code>, <code>TOOL_TIMEOUT</code></td><td>변환 도구 오류</td><td>재시도 소진 시 FAILED / 알림</td></tr>
+    <tr><td>SEARCH_ENGINE_ERROR</td><td>✓(5회)</td><td><code>INDEX_UNAVAILABLE</code></td><td>검색엔진 점검</td><td>INDEX만 지연 / 30분 지속 시 알림</td></tr>
+  </table>
+  <p class="muted">retryable=✓이고 retry_count &lt; max_retry면 RETRY(+지수 백오프), 아니면 FAILED. FailureType별 백오프 base 오버라이드 가능(SEARCH_ENGINE 30초).</p>
+
+  <h2>14. 취소 / Graceful Shutdown</h2>
+  <ul>
+    <li><b>SIGTERM</b>: <code>shuttingDown=true</code> → 신규 Claim 중단 → 현재 job 완료 대기(기본, drain). supervisor <code>stopwaitsecs</code>는 최장 job 고려(TRANSCODE 7500s).</li>
+    <li>즉시 종료 필요 시(2번째 SIGTERM): 현재 Handler의 <code>cancel()</code> 호출 — 외부 프로세스 kill → 부분 산출물(.tmp) 삭제 → job은 정리하지 않고 종료 → lease 만료로 Scheduler가 RETRY 회수.</li>
+    <li><b>관리자 취소</b>: CancellationToken이 heartbeat 주기마다 <code>cancel_requested_at</code> 확인 → 감지 시 <code>cancel()</code> → RUNNING→CANCELED 전이(StateMachine) + lock 해제 + history(actor=admin 요청 참조).</li>
+    <li>종료 직전 <code>agents.status=OFFLINE</code> + current_job_id 정리.</li>
+  </ul>
+
+  <h2>15. 안전한 파일 처리 정책 (MediaStorageService)</h2>
+  <ul>
+    <li>모든 쓰기는 <code>{zone}/.tmp/{job_id}/</code>에 먼저 → 완료 검증(크기&gt;0, checksum, 포맷 probe) → 최종 경로로 <b>atomic rename</b>(동일 파일시스템 보장).</li>
+    <li>동일 path 덮어쓰기 = 재실행 upsert 케이스만 허용 — rename이 원자적이므로 부분 쓰기 노출 없음.</li>
+    <li>실패·취소 시 .tmp 디렉터리 전체 삭제.</li>
+    <li><b>MASTER zone 보호</b>: 서비스에 <code>assertNotMasterMutation(path)</code> 가드 — MASTER 경로에 대한 수정·삭제 API 자체를 제공하지 않는다(TM의 최초 쓰기만 예외 메서드).</li>
+    <li>웹 표출 파일(PROXY/THUMBNAIL/CATALOG/DOCUMENT)만 갱신 가능.</li>
+  </ul>
+
+  <h2>16. 로그 기록 정책 (JobLogService)</h2>
+  <ul>
+    <li>attempt 시작 시 INFO(command 포함), 종료 시 INFO/ERROR(message + detail JSON) — 최소 2건.</li>
+    <li>stdout/stderr는 각 <b>1MB 상한</b>으로 컬럼 저장(head 256KB + tail 768KB 절단 표기). 초과 원본은 <code>{zone}/.logs/{job_id}/attempt{n}.log</code>로 파일 보관, detail에 경로 기록.</li>
+    <li>fail_reason_code ↔ 사용자 안내 문구 매핑은 단일 PHP 상수 맵(<code>FailReasonCatalog</code>)으로 관리 — API·화면·알림이 공유.</li>
+    <li>level: DEBUG(개발 시), INFO(정상 절차), WARN(부분 실패·lease 경고), ERROR(실패 확정).</li>
+  </ul>
+
+  <h2>17. Worker 설정 파일 예시</h2>
+  <pre># config/workers/tc-worker-01.yaml
+worker_name: tc-worker-01
+worker_type: TRANSCODE
+supported_job_types: [TC]
+max_concurrency: 1
+lease_seconds: 600
+heartbeat_interval: 30
+poll_interval_min: 2
+poll_interval_max: 5
+storage:
+  temp:      /storage/temp
+  master:    /storage/master      # read-only mount 권장
+  proxy:     /storage/proxy
+  thumbnail: /storage/thumbnail
+  catalog:   /storage/catalog
+  document:  /storage/document
+tools:
+  ffmpeg:  /usr/bin/ffmpeg
+  ffprobe: /usr/bin/ffprobe
+gpu:
+  enabled: true
+  encoder: h264_nvenc
+log:
+  stdout_limit_bytes: 1048576</pre>
+  <p class="muted">TRANSCODE 외 Worker는 master를 read-only로 마운트 — MASTER 보호를 OS 레벨에서도 강제한다(TM Worker만 쓰기 마운트).</p>
+
+  <h2>18. Laravel Artisan Command 설계</h2>
+  <table>
+    <tr><th style="width: 330px;">Command</th><th>목적 / 옵션</th></tr>
+    <tr><td><code>workflow:worker --config=tc-worker-01</code></td><td>Worker 프로세스 실행 (§5 루프). <code>--type/--name</code>으로 config 오버라이드, <code>--once</code>(1 job 후 종료, 테스트용)</td></tr>
+    <tr><td><code>workflow:scheduler</code></td><td>Scheduler 데몬 — READY 전환·SKIPPED 전파·PUBLISH 판정·RETRY 재개·타임아웃·Lock 회수·헬스 감시 (advisory lock으로 단일 실행). <code>--tick=10</code></td></tr>
+    <tr><td><code>workflow:recover-locks</code></td><td>만료 lock 수동 회수 (Scheduler 다운 시 응급용). <code>--dry-run</code></td></tr>
+    <tr><td><code>workflow:worker-status</code></td><td>agents 테이블 콘솔 출력 — 운영 확인용</td></tr>
+  </table>
+  <p class="muted"><b>동시성 모델(확정)</b>: 초기 구현은 Worker 프로세스 1개 = Job 1개. 동시성은 프로세스 내부 멀티스레드가 아니라 supervisor <code>numprocs</code>로 해결한다. <code>current_job_id</code>는 이 전제에서만 유효하며, <code>max_concurrency</code>는 노드 용량 표시/향후 확장용으로만 사용(Claim 로직이 참조하지 않음). 추후 1 Worker N Job이 필요하면 <code>workflow_worker_agent_slots</code> 테이블을 별도 검토한다. heartbeat는 별도 커맨드가 아니라 Worker 프로세스 내부 타이머로 처리(프로세스 분리 시 lease 의미가 깨짐). supervisor 프로그램 단위 = Worker 1 프로세스, <code>numprocs</code>로 동시 실행 수 제어.</p>
+
+  <h2>19. 테스트 기준</h2>
+  <table>
+    <tr><th style="width: 250px;">테스트</th><th>검증 내용</th></tr>
+    <tr><td>Claim 동시성</td><td>Worker N개 동시 claim — 같은 job 이중 claim 0건 (SKIP LOCKED)</td></tr>
+    <tr><td>Lock 중복 방지</td><td>lock 존재 상태 재INSERT 시 PK 충돌 → claim 롤백</td></tr>
+    <tr><td>Heartbeat 연장</td><td>30초 주기 locked_until 연장 확인</td></tr>
+    <tr><td>lease 상실 fencing</td><td>lock 삭제 후 SUCCESS 기록 시도 → 0 rows, 결과 폐기 + WARN</td></tr>
+    <tr><td>TC progress</td><td>ffmpeg -progress 파싱 → percent 단조 증가, 스로틀 동작</td></tr>
+    <tr><td>실패 유형별 retry</td><td>PERMANENT 즉시 FAILED, TRANSIENT 백오프 RETRY, 소진 시 FAILED</td></tr>
+    <tr><td>cancel_requested</td><td>실행 중 마킹 → 프로세스 kill → CANCELED + .tmp 정리</td></tr>
+    <tr><td>PUBLISH 검증</td><td>rendition DB 행 있으나 파일 없음 → REQUIRED_RENDITION_MISSING</td></tr>
+    <tr><td>rendition upsert</td><td>재실행 시 동일 키 UPDATE, 파일 atomic 교체</td></tr>
+    <tr><td>graceful shutdown</td><td>SIGTERM → 현재 job 완료 → OFFLINE 전환 · 2차 SIGTERM → cancel 경로</td></tr>
+  </table>
+
+  <h2>20. 운영 시 고려사항</h2>
+  <ul>
+    <li>PHP 장기 실행 대비: 메모리 누수 감시 — job N건(예: 100건) 처리 후 자발적 재시작(supervisor autorestart).</li>
+    <li>DB 커넥션 단절 시 지수 백오프 재연결 — heartbeat 실패 카운트와 연동.</li>
+    <li>Worker 버전 롤링 배포: DISABLED(drain) → 배포 → enable. 배포 중 큐 적체 감시.</li>
+    <li>시계 동기화(NTP) 필수 — lease·timeout 판정이 시각 기반.</li>
+  </ul>
+
+  <h2>21. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>TranscodeProfile Seed 정의</b> — 유형별 ffmpeg 프리셋 표준값</li>
+    <li><b>관리자 화면 하이파이 목업</b> — Frame CMS 디자인 시스템 기반</li>
+    <li><b>장애 대응 Runbook</b> — 알림별 표준 대응 절차</li>
+    <li><b>부하 테스트 계획</b> — 동시 업로드 N건 처리량·병목 검증</li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

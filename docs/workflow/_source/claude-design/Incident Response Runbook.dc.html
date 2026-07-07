@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; }
+  doc-page .muted { color: #6b7080; }
+  doc-page .sev1 { color: #b23a3a; font-weight: 700; }
+  doc-page .sev2 { color: #b25c1f; font-weight: 700; }
+  doc-page .sev3 { color: #8a6d1a; font-weight: 700; }
+  doc-page .sev4 { color: #2c6e49; font-weight: 700; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Workflow Incident Response Runbook</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Workflow Incident Response Runbook</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">워크플로우 장애 대응 Runbook — 운영자 실무 절차서</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: 설계 문서 12종 (각 v1.0)</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>장애 상황에서 운영자가 <b>어떤 화면을 보고 → 어떤 로그·쿼리로 원인을 좁히고 → 어떤 관리자 액션을 어떤 기준으로 수행할지</b>를 정의한다. 재시도·취소·Lock 회수·Worker 비활성화·재처리의 판단 기준과, Master 원본 보호 원칙, 감사 로그 기록 기준을 포함한다.</p>
+
+  <h2>2. 장애 대응 기본 원칙</h2>
+  <ul>
+    <li><b>Master Storage의 원본은 어떤 상황에서도 삭제·수정하지 않는다.</b></li>
+    <li>원인 확인 전 대량 재시도 금지 — 같은 원인이면 실패만 반복되고 로그가 오염된다.</li>
+    <li>필수 실패(콘텐츠 차단)와 선택 실패(경고)를 먼저 구분한다.</li>
+    <li>분류 우선: Worker 장애인가 / Storage 장애인가 / 사용자 파일 문제인가 / 외부 시스템(검색엔진)인가.</li>
+    <li>HIGH 위험 조작(Lock 회수·Worker 관리)은 사유 입력 + 감사 로그 필수.</li>
+    <li>Lock 강제 회수는 heartbeat·Worker 상태 확인 후에만 (§14).</li>
+    <li>재처리는 항상 새 workflow_instance 생성 — 기존 인스턴스를 되살리지 않는다.</li>
+    <li>동일 장애 반복 = 개별 Job 문제가 아닌 시스템 문제 — 개별 조치를 멈추고 상위 원인 조사.</li>
+  </ul>
+
+  <h2>3. 장애 심각도 분류</h2>
+  <table>
+    <tr><th style="width: 52px;">SEV</th><th>기준 / 예시</th><th style="width: 78px;">대응 목표</th><th style="width: 105px;">알림 / 에스컬레이션</th></tr>
+    <tr><td class="sev1">SEV1</td><td>전체 워크플로우 중단 — DB 장애, Scheduler 정지, 전 Worker OFFLINE, Master Storage 유실</td><td>15분 내 착수</td><td>전 운영진 + 개발팀 즉시 / 30분 내 미해결 시 책임자</td></tr>
+    <tr><td class="sev2">SEV2</td><td>특정 Worker 유형·미디어 유형 처리 중단 — TC Worker 전멸, 검색엔진 다운, PROXY zone 장애</td><td>1시간 내 착수</td><td>운영 채널 + 담당 개발자 / 2시간 미해결 시 SEV1 격상</td></tr>
+    <tr><td class="sev3">SEV3</td><td>일부 콘텐츠 실패, 선택 작업 실패 증가 — 손상 파일 다수, OCR 반복 실패</td><td>당일 내</td><td>운영 채널 / 패턴 반복 시 SEV2 검토</td></tr>
+    <tr><td class="sev4">SEV4</td><td>경고성 이벤트·일시 지연 — 큐 일시 증가, 단발 TIMEOUT</td><td>모니터링</td><td>대시보드 확인만 / 24h 지속 시 SEV3</td></tr>
+  </table>
+
+  <h2>4. 초기 확인 화면 (순서대로)</h2>
+  <table>
+    <tr><th style="width: 44px;">순서</th><th style="width: 160px;">화면</th><th>확인 항목</th></tr>
+    <tr><td>1</td><td>워크플로우 대시보드</td><td>경고 배너 · FAILED 콘텐츠 수 · Job 상태 카드 이상치 · 실패율/재시도율 · TC Queue Length</td></tr>
+    <tr><td>2</td><td>시스템 알림</td><td>미확인 HIGH 알림 · 이벤트 유형·발생 빈도 (동일 유형 반복 = 시스템 문제)</td></tr>
+    <tr><td>3</td><td>Worker 상태</td><td>OFFLINE/ERROR Worker · heartbeat delay · current_job</td></tr>
+    <tr><td>4</td><td>RUNNING Job</td><td>stall(진행률 미갱신) · 타임아웃 임박 · heartbeat 지연 행</td></tr>
+    <tr><td>5</td><td>실패 Job</td><td>필수/선택 분포 · fail_reason_code 집중도 · job_type/worker 집중도</td></tr>
+    <tr><td>6</td><td>Job 로그 상세</td><td>대표 실패 job의 stderr·history 타임라인</td></tr>
+    <tr><td>7</td><td>콘텐츠 처리 상세</td><td>파이프라인 어느 단계에서 멈췄는지 · rendition 존재</td></tr>
+    <tr><td>8</td><td>Storage / Search Engine</td><td>zone mount·용량 · 클러스터 health (인프라 도구)</td></tr>
+  </table>
+
+  <h2>5. 공통 진단 체크리스트</h2>
+  <ul>
+    <li>☐ Worker OFFLINE / ERROR 존재? → §7·8</li>
+    <li>☐ READY Queue 급증? (특정 job_type?) → §6-4</li>
+    <li>☐ RUNNING 장기 정체 / 진행률 stall? → §6-5</li>
+    <li>☐ TIMEOUT · Lock 만료 회수 반복? → §6-6·7</li>
+    <li>☐ 실패율 증가 — 특정 job_type / worker_name 집중? (집중 = 해당 축의 문제)</li>
+    <li>☐ Storage I/O 오류 로그? → §10</li>
+    <li>☐ Search Index FAILED 증가? → §11</li>
+    <li>☐ Master / Proxy / Thumbnail rendition 누락? → §12</li>
+  </ul>
+
+  <h2>6. 장애 시나리오별 대응 절차 (요약표)</h2>
+  <table>
+    <tr><th style="width: 30px;">#</th><th style="width: 130px;">시나리오</th><th>원인 분류 → 즉시 조치 → 복구 / 에스컬레이션</th></tr>
+    <tr><td>1</td><td>Worker OFFLINE</td><td>§7 상세 절차</td></tr>
+    <tr><td>2</td><td>Worker ERROR</td><td>§8 상세 절차</td></tr>
+    <tr><td>3</td><td>TC Worker 병목</td><td>TC 큐 길이·처리 시간 확인 → 대용량 job 확인 → 노드 증설 또는 우선순위 조정. 반복 시 용량 계획 재검토 (SEV2)</td></tr>
+    <tr><td>4</td><td>READY Queue 급증</td><td>Worker 가동 확인(전멸=SEV1) → 특정 type 집중이면 해당 Worker 점검 → 대량 업로드면 §6-25</td></tr>
+    <tr><td>5</td><td>RUNNING 장기 정체</td><td>진행률 갱신 시각 확인 — 갱신 중=느림(대기), 미갱신 2분+=stall → Worker 로그 확인 → timeout 대기 또는 취소</td></tr>
+    <tr><td>6</td><td>TIMEOUT 발생</td><td>단발=원본 크기 확인(timeout_sec 재조정 검토), 반복=Worker/도구 장애 → RETRY 자동 처리 확인 · 감사 로그 불필요(자동)</td></tr>
+    <tr><td>7</td><td>Lock 만료 회수 반복</td><td>동일 Worker 반복이면 해당 Worker DISABLED(drain) → 프로세스·리소스 점검. 산발적이면 DB/네트워크 점검 (SEV2)</td></tr>
+    <tr><td>8</td><td>VERIFY 실패 증가</td><td>§13 — checksum 불일치 다수면 업로드 경로/Storage 의심(SEV2), 포맷 위반 다수면 사용자 안내 강화(SEV3)</td></tr>
+    <tr><td>9</td><td>손상/비허용 파일</td><td>PERMANENT — 재시도 금지, 사용자 재업로드 안내. 콘텐츠 FAILED 유지</td></tr>
+    <tr><td>10</td><td>Storage I/O 오류</td><td>§10 상세 절차 (SEV1~2)</td></tr>
+    <tr><td>11</td><td>Master rendition 누락</td><td><b>SEV1 취급</b> — 무결성 사고. TM 로그·audit 확인, temp 사본 존재 확인, 원인 규명 전 CLEANUP 중단</td></tr>
+    <tr><td>12</td><td>Proxy 누락</td><td>TC/IMAGE_TC job 상태 확인 → 해당 job 재시도 → PUBLISH 재시도</td></tr>
+    <tr><td>13</td><td>Thumbnail/Catalog 누락</td><td>CA job 재시도 → PUBLISH 재시도. 프록시 자체가 없으면 §6-12 먼저</td></tr>
+    <tr><td>14</td><td>PUBLISH 실패</td><td>§12 상세 절차</td></tr>
+    <tr><td>15</td><td>INDEX/검색엔진 장애</td><td>§11 상세 절차</td></tr>
+    <tr><td>16</td><td>OCR 실패</td><td>선택 작업 — PUBLISH 비차단 확인 → 엔진 로그 확인 → 복구 후 일괄 재시도(재색인 자동)</td></tr>
+    <tr><td>17</td><td>DOC_PREVIEW 실패</td><td>암호화 문서(PERMANENT)와 도구 장애 구분 → 후자면 §6-18</td></tr>
+    <tr><td>18</td><td>LibreOffice 장애</td><td>프로세스 잔존(zombie)·프로필 디렉터리 잠금 확인 → DOCUMENT Worker 재시작 → 반복 시 버전·문서 유형 상관 분석</td></tr>
+    <tr><td>19</td><td>ffmpeg 실패</td><td>§9 상세 절차</td></tr>
+    <tr><td>20</td><td>DB 연결 장애</td><td><b>SEV1</b> — 전 컴포넌트 영향. DB 복구 후: Scheduler 기동 → lock 회수 자동 복구 → Worker 재연결 확인</td></tr>
+    <tr><td>21</td><td>Scheduler 중복/중단</td><td>중복=advisory lock이 차단(로그만 확인). 중단=READY 전환 정지 → supervisor 재시작 (SEV1~2)</td></tr>
+    <tr><td>22</td><td>늦은 SUCCESS 결과</td><td>fencing이 자동 폐기(WARN 로그) — 조치 불필요. rendition 정합만 확인</td></tr>
+    <tr><td>23</td><td>관리자 조작 실수</td><td>audit_logs로 조작 확인 → 상태 기계가 허용하는 역방향 조치(취소된 job은 재처리로 복구) → 권한 재검토</td></tr>
+    <tr><td>24</td><td>삭제 중 Job 실행</td><td>시스템이 일괄 CANCELED 처리 — 잔존 RUNNING 확인 후 lock 회수. INSERT 가드 동작 확인</td></tr>
+    <tr><td>25</td><td>대량 업로드 지연</td><td>장애 아님 — 큐 소진 속도 확인, 긴급 콘텐츠만 priority 상향, 필요 시 Worker 임시 증설</td></tr>
+  </table>
+  <p class="muted">모든 시나리오 공통: 수동 조치는 감사 로그(사유 포함) 기록, 조치 후 §20 검증 체크리스트 수행. <b>기준 출처</b>: 조작 기준·버튼 노출 = Admin UI Spec §11 · Lock 회수 = Admin API Spec §15 · Worker disable(drain) = Admin API Spec §18 · SQL 테이블/컬럼 = Migration &amp; Seed Spec 최종본 — 문서 간 불일치 발견 시 원본 정책 문서가 우선한다.</p>
+
+  <h2>7. Worker OFFLINE 대응 (상세)</h2>
+  <ol>
+    <li>Worker 상태 화면 — <code>last_heartbeat_at</code>·delay 확인 (90초+ = OFFLINE 판정).</li>
+    <li><code>current_job_id</code>·보유 lock 확인 (§18 SQL-4) — 실행 중이던 job 파악.</li>
+    <li>서버 접속: supervisor 상태(<code>supervisorctl status</code>) · Worker 프로세스 로그 · 리소스(CPU/메모리/디스크).</li>
+    <li>프로세스 죽음 확인 시 재시작 → ONLINE 회복 + heartbeat 재개 확인.</li>
+    <li>lock 회수: Scheduler가 lease 만료 시 자동 회수(RETRY) — <b>기본은 대기</b>. 긴급하면 Worker 사망 확인 후 수동 회수(§14).</li>
+    <li>RUNNING job → RETRY 전환은 자동 회수에 맡기고, 수동 개입은 SEV1·2 상황에서만.</li>
+    <li>동일 Worker 반복 OFFLINE(24h 내 3회+) → DISABLED 처리 후 인프라 점검 이관.</li>
+  </ol>
+
+  <h2>8. Worker ERROR 대응 (상세)</h2>
+  <ol>
+    <li>ERROR 전환 원인 확인 — Worker 로그에서 연속 실패 job_type·예외 확인.</li>
+    <li>외부 도구 점검: 부팅 점검 명령 수동 실행(<code>ffmpeg -version</code> 등) · Storage 접근 테스트 · Worker 버전 확인(배포 직후면 롤백 검토).</li>
+    <li><b>해제 전 기준</b>: 원인이 식별되고 제거되었을 때만 clear-error — 원인 불명 상태 해제 금지(재발 시 실패 job만 늘어남).</li>
+    <li>clear-error 액션(사유 필수) → ONLINE 복귀 → 첫 job 1~2건 성공 감시.</li>
+    <li>해제 후 동일 원인 재발 → DISABLED 처리 + 개발팀 이관.</li>
+  </ol>
+
+  <h2>9. TC / ffmpeg 장애 대응</h2>
+  <ol>
+    <li>Job 로그에서 command·stderr 마지막 20줄 확인 — 오류 메시지로 분류.</li>
+    <li>입력 codec 확인(media_info) — 미지원 codec이면 PERMANENT 처리 + 프로파일/지원 목록 개정 검토.</li>
+    <li>transcode_profile 활성·파라미터 확인 (프로파일 변경 직후면 유력 원인).</li>
+    <li>GPU 인코더 오류(NVENC) → GPU 상태(<code>nvidia-smi</code>) 확인 → GPU Worker DISABLED 후 CPU 풀로 우회(fallback), GPU 복구 후 재활성.</li>
+    <li>디스크 여유·임시 경로(<code>.tmp/{job_id}</code>) 확인 — DISK_FULL이면 §10.</li>
+    <li>재시도 판단: 도구 크래시·타임아웃=재시도 가능 / 입력 파일 문제=PERMANENT.</li>
+  </ol>
+
+  <h2>10. Storage 장애 대응</h2>
+  <ol>
+    <li>zone별 접근 확인: TEMP/MASTER/PROXY/THUMBNAIL/CATALOG/DOCUMENT — mount(<code>df -h</code>, <code>mount</code>)·권한·용량.</li>
+    <li>I/O 오류 로그(시스템 로그 + job logs STORAGE_IO) 대조 — 특정 zone 집중인지 전역인지.</li>
+    <li>용량 부족: CLEANUP 배치 즉시 실행 + temp 유예 기간 단축 검토. <b>Master는 정리 대상 아님.</b></li>
+    <li>checksum 불일치: 해당 콘텐츠 격리(재시도 중단) → 원본·사본 대조 → 무결성 사고로 개발팀 이관 (SEV2+).</li>
+    <li>장애 중: 해당 zone에 쓰는 Worker 유형 DISABLED(drain) — 실패 누적 방지.</li>
+    <li>복구 후: 테스트 파일 write/delete 확인 → Worker enable → STORAGE_ERROR 실패 job 일괄 재시도.</li>
+  </ol>
+
+  <h2>11. Search Index 장애 대응</h2>
+  <ol>
+    <li><code>search_index_states</code> FAILED/STALE 건수(§18 SQL-9) + INDEX job 실패 로그 확인.</li>
+    <li>검색엔진 cluster health 확인 — red/yellow면 인프라 대응 우선 (SEV2).</li>
+    <li>mapping conflict(특정 콘텐츠만 실패) → 해당 필드 데이터 확인 후 개발팀 이관 — 재시도 무의미.</li>
+    <li>INDEX는 필수 job — 장애 지속 시 신규 콘텐츠 PUBLISH가 전부 차단됨을 인지. <b>강제 PUBLISH 금지</b> — 검색 불가 콘텐츠 양산.</li>
+    <li>복구 후: FAILED INDEX job 일괄 재시도(사유 기록) → search_index_states INDEXED 회복 확인 → STALE 잔량은 자동 재색인 확인.</li>
+  </ol>
+
+  <h2>12. PUBLISH 실패 대응</h2>
+  <ol>
+    <li>실패 사유 확인 — 필수 job 미완료인지 rendition 누락인지(history note에 <code>MISSING_RENDITION:*</code>).</li>
+    <li>필수 job 전체 SUCCESS 확인(§18 SQL-6) → 미완료면 해당 job부터 처리.</li>
+    <li>rendition 누락: DB 행 존재 + 파일 실재(stat) 대조 → 파일만 없으면 Storage 사고(§10), 행도 없으면 생성 job 미실행.</li>
+    <li>MASTER 누락은 §6-11 (SEV1 취급).</li>
+    <li>생성 job(TC/CA/DOC_PREVIEW) 재실행 → 성공 확인 → PUBLISH 재시도.</li>
+    <li><b>강제 PUBLISH 금지</b> — 필수 산출물 없는 READY는 웹 표출 깨짐으로 직결.</li>
+  </ol>
+
+  <h2>13. VERIFY 실패 대응</h2>
+  <table>
+    <tr><th style="width: 175px;">실패 항목</th><th>구분 / 대응</th></tr>
+    <tr><td>파일 없음 / 크기 0</td><td>업로드 중단 의심 — 사용자 재업로드 안내. temp 정리 여부 확인</td></tr>
+    <tr><td>checksum 불일치</td><td>단발=재업로드 안내 / 다수=업로드 경로·Storage 사고(§10, SEV2)</td></tr>
+    <tr><td>MIME/확장자 위반</td><td>정책 위반 — PERMANENT, 지원 포맷 안내. 정당한 포맷이면 허용 목록 개정 요청</td></tr>
+    <tr><td>파일 손상</td><td>PERMANENT — 재시도 금지, 재업로드 안내</td></tr>
+    <tr><td>I/O 오류</td><td>재시도 가능 — 자동 재시도 확인, 반복 시 §10</td></tr>
+  </table>
+  <p class="muted">사용자 안내는 FailReasonCatalog의 표준 문구 사용 — 임의 문구로 안내하지 않는다.</p>
+
+  <h2>14. Lock 강제 회수 기준</h2>
+  <ul>
+    <li><b>회수 가능</b>: ① heartbeat 90초+ 중단 ② locked_until 경과 ③ Worker 프로세스 사망 확인 ④ RUNNING이 timeout 초과 ⑤ Worker가 DISABLED/ERROR 전환됨 — 이 중 하나 이상 + 로그로 교차 확인.</li>
+    <li><b>회수 금지</b>: 단순히 오래 걸린다는 이유(진행률이 갱신 중이면 정상 실행) — timeout과 자동 회수에 맡긴다.</li>
+    <li>절차: Job 로그·진행률 갱신 시각 확인 → Worker 상태 확인 → release-lock(사유 필수, HIGH) → RETRY 전환 확인.</li>
+    <li>회수 후 원래 Worker가 늦게 보내는 결과는 fencing이 자동 폐기(WARN 로그) — 별도 조치 불필요.</li>
+  </ul>
+
+  <h2>15. 재시도 기준</h2>
+  <table>
+    <tr><th style="width: 120px;">구분</th><th>기준 / 예시</th></tr>
+    <tr><td>자동 재시도</td><td>TRANSIENT·STORAGE·TOOL·SEARCH_ENGINE 오류 — 시스템이 백오프 재시도. 운영자는 관망</td></tr>
+    <tr><td>수동 재시도</td><td>max_retry 소진 후 원인 제거 확인된 경우(Storage 복구, 도구 수정) — 사유 기록 후 재시도</td></tr>
+    <tr><td>재시도 금지</td><td>PERMANENT(손상·비허용·암호화) — 재시도해도 동일 실패. 원인 미상 반복 실패도 조사 전 금지</td></tr>
+    <tr><td>재처리 필요</td><td>프로파일 변경 반영, 여러 job에 걸친 이상 — job 재시도가 아닌 콘텐츠 재처리(새 인스턴스)</td></tr>
+    <tr><td>재업로드 필요</td><td>USER_FILE_ERROR — 시스템 조치 불가, 사용자 안내</td></tr>
+  </table>
+
+  <h2>16. Worker 비활성화 기준</h2>
+  <ul>
+    <li>대상: 동일 Worker 동일 job_type 실패 반복 · 외부 도구 오류 반복 · Storage 접근 이상 · 배포/점검 예정 · 해당 Worker만 heartbeat 불안정 · GPU 장애.</li>
+    <li><b>drain=true</b>(기본): 진행 중 job 완료 후 유휴 — 배포·점검·성능 저하 등 비긴급 상황.</li>
+    <li><b>drain=false</b>: 진행 중 job도 중단(RETRY 재배정) — 잘못된 산출물을 만들고 있거나 Storage를 오염시키는 긴급 상황만. 이중 확인 필수.</li>
+  </ul>
+
+  <h2>17. 관리자 조작별 주의사항</h2>
+  <table>
+    <tr><th style="width: 105px;">조작</th><th style="width: 55px;">위험도</th><th style="width: 48px;">사유</th><th>수행 전 확인 → 수행 후 확인</th></tr>
+    <tr><td>Job 재시도</td><td class="sev4">LOW</td><td>선택</td><td>원인 제거 여부 → RETRY→READY→SUCCESS 진행</td></tr>
+    <tr><td>일괄 재시도</td><td class="sev3">MED</td><td>필수</td><td>동일 fail_reason끼리만·원인 제거 → 부분 실패 목록 확인</td></tr>
+    <tr><td>Job 취소</td><td class="sev3">MED</td><td>필수</td><td>후속 SKIPPED 전파 영향 → 콘텐츠 상태 확인</td></tr>
+    <tr><td>Lock 강제 회수</td><td class="sev1">HIGH</td><td>필수</td><td>§14 기준 충족 → RETRY 전환 + 재실행 성공</td></tr>
+    <tr><td>콘텐츠 재처리</td><td class="sev3">MED</td><td>필수</td><td>모드(failed_from/full) 적절성 → 새 인스턴스 진행</td></tr>
+    <tr><td>콘텐츠 취소</td><td class="sev3">MED</td><td>필수</td><td>사용자 영향(FAILED 처리됨) → job 일괄 CANCELED 확인</td></tr>
+    <tr><td>Worker 비활성화</td><td class="sev3">MED</td><td>필수</td><td>drain 모드·잔여 용량 → 큐 적체 감시</td></tr>
+    <tr><td>ERROR 해제</td><td class="sev1">HIGH</td><td>필수</td><td>원인 제거 확인(§8) → 첫 job 성공 감시</td></tr>
+    <tr><td>PUBLISH 재시도</td><td class="sev4">LOW</td><td>선택</td><td>필수 산출물 존재(§12) → READY 전환</td></tr>
+  </table>
+
+  <h2>18. 장애 대응 SQL 예시</h2>
+  <pre>-- 1) 상태별 Job 수 (type별)
+SELECT job_type, status, count(*) FROM workflow_jobs
+WHERE created_at > now() - interval '24 hours' GROUP BY 1, 2 ORDER BY 1, 2;
+
+-- 2) Worker heartbeat delay
+SELECT worker_name, status, EXTRACT(EPOCH FROM now() - last_heartbeat_at)::int AS delay_sec,
+       current_job_id FROM workflow_worker_agents ORDER BY delay_sec DESC NULLS LAST;
+
+-- 3) RUNNING 중 timeout 임박 (80%+)
+SELECT id, job_type, worker_id, started_at,
+       EXTRACT(EPOCH FROM now() - started_at)::int AS elapsed, timeout_sec
+FROM workflow_jobs WHERE status = 'RUNNING'
+  AND now() - started_at > make_interval(secs => timeout_sec * 0.8);
+
+-- 4) expired lock 목록
+SELECT l.job_id, l.locked_by_worker_id, l.locked_until, j.job_type, j.status
+FROM workflow_job_locks l JOIN workflow_jobs j ON j.id = l.job_id
+WHERE l.locked_until < now();
+
+-- 5) 최근 실패 Job (사유 집중도)
+SELECT fail_reason_code, job_type, count(*) FROM workflow_jobs
+WHERE status = 'FAILED' AND finished_at > now() - interval '6 hours'
+GROUP BY 1, 2 ORDER BY count(*) DESC;
+
+-- 6) 특정 콘텐츠의 job 상태
+SELECT job_type, status, retry_count, fail_reason_code, started_at, finished_at
+FROM workflow_jobs WHERE content_id = :cid
+  AND instance_id = (SELECT max(id) FROM workflow_instances WHERE content_id = :cid)
+ORDER BY id;
+
+-- 7) 특정 Worker의 최근 실패
+SELECT id, job_type, fail_reason_code, finished_at FROM workflow_jobs
+WHERE worker_id = :wid AND status = 'FAILED' ORDER BY finished_at DESC LIMIT 20;
+
+-- 8) 필수 rendition 누락 (READY 전 콘텐츠 검증 — 영상 예)
+SELECT c.id FROM contents c
+WHERE c.media_type = 'VIDEO' AND c.status = 'PROCESSING'
+  AND NOT EXISTS (SELECT 1 FROM media_renditions r
+    WHERE r.content_id = c.id AND r.rendition_type = 'PROXY_VIDEO');
+
+-- 9) 색인 이상 목록
+SELECT content_id, status, last_error, indexed_at FROM search_index_states
+WHERE status IN ('FAILED','STALE') ORDER BY indexed_at NULLS FIRST LIMIT 50;
+
+-- 10) 최근 관리자 조작
+SELECT actor_user_id, action, target_type, target_id, reason, created_at
+FROM admin_audit_logs ORDER BY created_at DESC LIMIT 30;</pre>
+
+  <h2>19. 로그 확인 기준</h2>
+  <table>
+    <tr><th style="width: 175px;">로그</th><th>봐야 할 항목</th></tr>
+    <tr><td>workflow_job_logs</td><td>attempt별 command·stderr 마지막 부분·detail JSON — 실패의 직접 원인</td></tr>
+    <tr><td>workflow_job_histories</td><td>상태 전이 타임라인·actor — "언제 누가 무엇을" 재구성</td></tr>
+    <tr><td>admin_audit_logs</td><td>조작 실수·조작 시각과 장애 시각의 상관</td></tr>
+    <tr><td>Worker process log</td><td>claim/heartbeat 주기·예외 스택·재시작 이력</td></tr>
+    <tr><td>ffmpeg / LibreOffice / OCR stderr</td><td>도구별 오류 메시지 (job_logs에 저장됨, 대용량은 .logs 파일)</td></tr>
+    <tr><td>Storage 시스템 로그</td><td>mount 오류·I/O 오류·용량 경고</td></tr>
+    <tr><td>Search Engine 로그</td><td>cluster health·mapping 오류·bulk 거부</td></tr>
+    <tr><td>Laravel 앱 로그</td><td>Scheduler 틱 오류·API 500·trace_id 추적</td></tr>
+  </table>
+
+  <h2>20. 복구 후 검증 체크리스트</h2>
+  <ul>
+    <li>☐ Worker 전원 ONLINE/BUSY (OFFLINE·ERROR 0)</li>
+    <li>☐ READY Queue 감소 추세 · RUNNING 정상 진행(진행률 갱신)</li>
+    <li>☐ FAILED·TIMEOUT 증가 정지 · Lock 회수 반복 중단</li>
+    <li>☐ 신규 콘텐츠 1건 업로드 → READY 전환 end-to-end 확인</li>
+    <li>☐ Search Index INDEXED 회복 · STALE 잔량 소진 중</li>
+    <li>☐ 수행한 모든 수동 조작이 audit_logs에 사유와 함께 기록됨</li>
+    <li>☐ 장애 영향 콘텐츠 목록 확보 → 재시도/재처리 완료 → READY 확인</li>
+  </ul>
+
+  <h2>21. 사후 보고서 템플릿</h2>
+  <pre>[장애 보고서] {제목}
+─────────────────────────────
+발생 시각    : YYYY-MM-DD HH:MM (UTC)
+탐지 시각    : (탐지 경로: 알림/대시보드/사용자 신고)
+복구 시각    : / 총 영향 시간:
+심각도       : SEV1 | SEV2 | SEV3 | SEV4
+영향 범위    : (미디어 유형 / 콘텐츠 수 / 사용자 영향)
+원인         : (근본 원인 — 5 Whys)
+조치 내용    : (시각순 타임라인)
+재발 방지    : (기한·담당 포함)
+관련 ID      : Job / Content / Worker
+관련 로그    : (링크 또는 경로)
+관리자 조작  : (audit_logs 발췌)
+후속 작업    : (미완 항목·모니터링 계획)</pre>
+
+  <h2>22. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>관리자 화면 하이파이 목업</b> — 본 Runbook의 확인 화면들을 실제 UI로 (Frame CMS 디자인 시스템)</li>
+    <li><b>모니터링 알림 룰 정의서</b> — 심각도별 임계값·알림 채널 설정값</li>
+    <li><b>부하 테스트 계획</b> — SEV 기준 검증용 시나리오</li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Operations Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

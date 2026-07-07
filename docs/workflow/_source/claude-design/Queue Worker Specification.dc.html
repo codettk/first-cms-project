@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; }
+  doc-page .muted { color: #6b7080; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Queue &amp; Worker Architecture Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Queue &amp; Worker Architecture Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">Queue &amp; Worker 설계서 — Laravel + PostgreSQL 기반 DB Polling 워크플로우 실행 구조</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: Job Type Definition v1.0, DB Table Specification v1.0</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>본 문서는 <code>workflow_jobs</code>에 생성된 작업을 <b>어떤 Worker가, 어떻게 가져가고(Claim), 실행하고, 상태를 변경하고, 실패·재시도·타임아웃을 처리하는지</b>를 정의한다. DB 테이블 명세서 v1.0의 스키마를 실행 관점에서 구체화하며, Scheduler·Worker Agent·Lock의 책임 경계를 확정하여 개발자가 곧바로 구현에 착수할 수 있게 하는 것이 목적이다.</p>
+
+  <h2>2. 전체 Queue &amp; Worker 아키텍처</h2>
+  <pre>CMS Web Server ─(업로드·등록)→ PostgreSQL
+      │ Workflow Instance + workflow_jobs 생성 (TM=READY, 나머지 WAITING)
+      ▼
+Workflow Scheduler (독립 프로세스, 주기 실행)
+      │ ① 의존 충족 WAITING → READY   ② RETRY 도래 확인
+      │ ③ RUNNING 타임아웃 감시        ④ 만료 Lock 회수  ⑤ Worker 헬스 감시
+      ▼
+Job Queue = workflow_jobs (status IN READY/RETRY)   ← 별도 MQ 없음, DB가 큐
+      ▼ Claim (FOR UPDATE SKIP LOCKED + lease)
+Worker Agents ── TM / General / Transcode / Image / Audio / Document / OCR / Index
+      │ 실행: Storage 읽기·쓰기, 외부 도구(ffmpeg 등), Search Engine 색인
+      ▼
+상태 전이(SUCCESS/FAILED/RETRY/TIMEOUT) + histories/logs 기록
+      ▼
+Scheduler가 후속 Job READY 전환 → … → PUBLISH → contents.status = READY</pre>
+
+  <h2>3. 구성요소 설명</h2>
+  <table>
+    <tr><th style="width: 160px;">구성요소</th><th>책임</th></tr>
+    <tr><td>CMS Web Server</td><td>업로드·등록 처리, 인스턴스/job 생성 트리거, 관리자 화면 API. <b>job을 직접 실행하지 않는다.</b></td></tr>
+    <tr><td>Workflow Scheduler</td><td>상태 오케스트레이션 전담 — READY 전환, SKIPPED 처리, PUBLISH 판정, 타임아웃·Lock 회수, 헬스 감시</td></tr>
+    <tr><td>Job Queue</td><td>물리적 큐 없음. <code>workflow_jobs</code> 테이블 + partial index가 큐 역할(폐쇄망 친화)</td></tr>
+    <tr><td>Worker Agent</td><td>Claim → 실행 → 결과 기록. 자신이 지원하는 job_type만 소비</td></tr>
+    <tr><td>PostgreSQL</td><td>큐·상태·잠금·이력의 단일 진실 원천(SSOT)</td></tr>
+    <tr><td>Storage</td><td>TEMP / MASTER / PROXY / THUMBNAIL / CATALOG 구역 — Worker만 접근, 웹은 비-MASTER만</td></tr>
+    <tr><td>Search Engine</td><td>INDEX Worker가 색인. 장애 시 INDEX job만 지연되고 다른 파이프라인은 영향 없음</td></tr>
+  </table>
+
+  <h2>4. Worker 유형 정의</h2>
+  <table>
+    <tr><th style="width: 82px;">worker_type</th><th style="width: 105px;">처리 job_type</th><th style="width: 90px;">외부 도구</th><th style="width: 62px;">CPU/GPU</th><th style="width: 48px;">권장 동시</th><th>병목 / 장애 영향 / 확장</th></tr>
+    <tr><td><code>TM</code></td><td>TM</td><td>rsync / S3 SDK</td><td>I/O 중심</td><td>2~4</td><td>스토리지 I/O 병목. 장애 시 전 파이프라인 시작 불가 — 최소 2대. 스토리지 대역폭 기준 수평 확장</td></tr>
+    <tr><td><code>GENERAL</code></td><td>VERIFY, MA, PUBLISH, CLEANUP</td><td>ffprobe, ExifTool</td><td>CPU 低</td><td>4~8</td><td>병목 낮음. 장애 시 상태 전환 정체. 저비용 수평 확장</td></tr>
+    <tr><td><code>TRANSCODE</code></td><td>TC</td><td>ffmpeg (+NVENC)</td><td>CPU 高 / GPU 권장</td><td>1~2</td><td><b>최대 병목.</b> 장애 시 영상 파이프라인 정지. GPU 노드 분리 + 큐 길이 기반 수평 확장</td></tr>
+    <tr><td><code>IMAGE</code></td><td>IMAGE_TC, CA</td><td>libvips / ImageMagick</td><td>CPU 中</td><td>4</td><td>대형 TIFF/RAW 메모리 스파이크 주의. 수평 확장</td></tr>
+    <tr><td><code>AUDIO</code></td><td>AUDIO_TC, WAVEFORM</td><td>ffmpeg, audiowaveform</td><td>CPU 低</td><td>4</td><td>병목 낮음. GENERAL과 통합 배치 가능</td></tr>
+    <tr><td><code>DOCUMENT</code></td><td>DOC_PREVIEW, TEXT_EXTRACT</td><td>LibreOffice, PDF 렌더러</td><td>CPU 中</td><td>2</td><td>LibreOffice 프로세스 불안정 — 프로세스 격리·재기동 필수</td></tr>
+    <tr><td><code>OCR</code></td><td>OCR</td><td>Tesseract / OCR 엔진</td><td>CPU 高</td><td>2</td><td>CPU 병목. 선택 작업이므로 장애 영향도 낮음 — 야간 배치 소화 가능</td></tr>
+    <tr><td><code>INDEX</code></td><td>INDEX</td><td>검색엔진 클라이언트</td><td>CPU 低</td><td>4</td><td>검색엔진 상태에 의존. 장애 시 색인만 지연(STALE 마킹으로 복구)</td></tr>
+  </table>
+
+  <h2>5. Job Claim 설계</h2>
+  <p>Worker는 아래 단일 트랜잭션으로 Claim한다. 조건: ① status IN (READY, RETRY) ② <code>next_attempt_at</code> ≤ now() ③ 지원 job_type ④ 우선순위·생성순 정렬.</p>
+  <pre>BEGIN;
+
+SELECT id, job_type, payload FROM workflow_jobs
+WHERE status IN ('READY','RETRY')
+  AND (next_attempt_at IS NULL OR next_attempt_at &lt;= now())
+  AND job_type = ANY(:supported_job_types)
+ORDER BY priority DESC, created_at ASC
+LIMIT 1
+FOR UPDATE SKIP LOCKED;
+-- 없으면 ROLLBACK 후 폴링 대기 (sleep 2~5s + jitter)
+
+INSERT INTO workflow_job_locks (job_id, locked_by_worker_id, locked_until, heartbeat_at)
+VALUES (:job_id, :worker_id, now() + interval '10 minutes', now());
+
+UPDATE workflow_jobs
+SET status='RUNNING', worker_id=:worker_id, started_at=now(),
+    retry_count = CASE WHEN status='RETRY' THEN retry_count + 1 ELSE retry_count END,
+    updated_at=now()
+WHERE id=:job_id;
+
+INSERT INTO workflow_job_histories (job_id, from_status, to_status, actor, note)
+VALUES (:job_id, 'READY', 'RUNNING', 'worker:' || :worker_id, 'claimed');
+
+COMMIT;</pre>
+  <ul>
+    <li><code>SKIP LOCKED</code>으로 다중 Worker 경합 시에도 서로 다른 행을 잡는다 — 대기 없음.</li>
+    <li><code>workflow_job_locks.job_id</code>가 PK이므로 이중 lease는 INSERT 충돌로 DB가 원천 차단.</li>
+    <li>Claim 실패(충돌·롤백)는 정상 흐름 — 즉시 다음 폴링으로.</li>
+  </ul>
+
+  <h2>6. Job Lock / Lease 설계</h2>
+  <table>
+    <tr><th style="width: 190px;">항목</th><th>정책</th></tr>
+    <tr><td>Lock 생성 시점</td><td>Claim 트랜잭션 내부 (RUNNING 전환과 원자적)</td></tr>
+    <tr><td>기본 lease</td><td><code>locked_until = now() + 10분</code></td></tr>
+    <tr><td>heartbeat 주기</td><td>30초 — <code>heartbeat_at = now()</code>, <code>locked_until = now() + 10분</code>으로 연장</td></tr>
+    <tr><td>장기 실행 Job</td><td>TC 등은 heartbeat 연장으로 자연 커버. 연장 UPDATE 실패가 2회 연속이면 Worker는 작업을 스스로 중단(결과 폐기)</td></tr>
+    <tr><td>만료 기준</td><td><code>locked_until &lt; now()</code></td></tr>
+    <tr><td>만료 시 처리</td><td>Scheduler가 lock 삭제 → job을 <code>retry_count &lt; max_retry</code>면 RETRY(+백오프), 초과면 FAILED로 전환 + history 기록(actor=system)</td></tr>
+    <tr><td>Worker 사망 판정</td><td><code>last_heartbeat_at</code>이 90초(3주기) 미갱신 → OFFLINE 전환, 해당 Worker의 lock 전부 회수</td></tr>
+    <tr><td>중복 실행 방지</td><td>3중 방어: SKIP LOCKED(경합) + locks PK(이중 lease) + CAS UPDATE(<code>WHERE status='RUNNING' AND worker_id=:me</code>)로 결과 기록</td></tr>
+  </table>
+  <p class="muted">회수된 job을 다른 Worker가 이미 재실행 중일 때 죽었던 Worker가 늦게 결과를 쓰는 것을 막기 위해, 모든 완료 UPDATE는 <code>worker_id = :me</code> 조건을 포함한다(lease fencing).</p>
+
+  <h2>7. Job 상태 전이 (전환 주체)</h2>
+  <table>
+    <tr><th style="width: 200px;">전이</th><th style="width: 120px;">주체</th><th>조건</th></tr>
+    <tr><td>WAITING → READY</td><td>Scheduler</td><td>선행 job 전부 SUCCESS 또는 SKIPPED</td></tr>
+    <tr><td>READY/RETRY → RUNNING</td><td>Worker</td><td>Claim 성공 (lock 획득)</td></tr>
+    <tr><td>RUNNING → SUCCESS</td><td>Worker</td><td>성공 조건 충족, result 기록</td></tr>
+    <tr><td>RUNNING → FAILED</td><td>Worker</td><td>영구 실패 또는 재시도 소진</td></tr>
+    <tr><td>RUNNING → RETRY</td><td>Worker / Scheduler</td><td>일시적 실패(Worker) 또는 lease 만료 회수(Scheduler)</td></tr>
+    <tr><td>RUNNING → TIMEOUT</td><td>Timeout Monitor (Scheduler 내)</td><td><code>started_at + timeout_sec &lt; now()</code></td></tr>
+    <tr><td>TIMEOUT → RETRY / FAILED</td><td>Scheduler</td><td>재시도 여력에 따라</td></tr>
+    <tr><td>RETRY → READY</td><td>Scheduler</td><td><code>next_attempt_at</code> 도래</td></tr>
+    <tr><td>FAILED → RETRY</td><td>Admin</td><td>관리자 수동 재시도 (retry_count 초기화)</td></tr>
+    <tr><td>WAITING/READY → SKIPPED</td><td>Scheduler</td><td>필수 선행 작업 최종 실패, 또는 조건 미충족(예: OCR 불필요)</td></tr>
+    <tr><td>WAITING/READY/RUNNING → CANCELED</td><td>Admin / System</td><td>콘텐츠 삭제·수동 취소</td></tr>
+  </table>
+
+  <h2>8. Scheduler 설계</h2>
+  <p>Scheduler는 Worker와 분리된 <b>단일 실행 보장</b> 프로세스로 운영한다(다중 기동 대비 advisory lock: <code>pg_try_advisory_lock</code>). 틱마다 순서대로:</p>
+  <ol>
+    <li><b>READY 전환</b> — 의존 충족 WAITING job 일괄 UPDATE (§17 SQL-1)</li>
+    <li><b>SKIPPED 전파</b> — 필수 작업 최종 FAILED 시 후속 필수 작업 SKIPPED + 콘텐츠 FAILED</li>
+    <li><b>PUBLISH 판정</b> — 필수 작업 전체 SUCCESS인 인스턴스의 PUBLISH job READY 전환 (선택 작업 실패는 무시)</li>
+    <li><b>RETRY 재개</b> — <code>next_attempt_at</code> 도래한 RETRY → READY</li>
+    <li><b>타임아웃 감시</b> — 장기 RUNNING → TIMEOUT</li>
+    <li><b>Lock 회수</b> — <code>locked_until &lt; now()</code> lock 삭제 + job RETRY/FAILED</li>
+    <li><b>Worker 헬스</b> — heartbeat 미갱신 Worker OFFLINE 처리</li>
+  </ol>
+  <p><b>실행 방식 권장</b>: 별도 long-running daemon(Laravel <code>artisan workflow:scheduler</code> 커맨드, supervisor 관리, 내부 10초 루프). Laravel Scheduler(cron, 최소 1분)는 틱 간격이 길어 보조로만 사용. Queue Worker 프로세스와는 반드시 분리한다.</p>
+
+  <h2>9. Worker 실행 흐름</h2>
+  <table>
+    <tr><th style="width: 34px;">#</th><th style="width: 170px;">단계</th><th>DB 변경</th></tr>
+    <tr><td>1</td><td>Worker 부팅</td><td><code>workflow_worker_agents</code> upsert (worker_name 기준, status=ONLINE, version·capacity 갱신)</td></tr>
+    <tr><td>2</td><td>supported_job_types 로드</td><td>— (설정 → agents 행에 기록)</td></tr>
+    <tr><td>3</td><td>heartbeat 루프 시작</td><td><code>last_heartbeat_at</code> 30초마다 UPDATE</td></tr>
+    <tr><td>4</td><td>Job Claim</td><td>§5 트랜잭션 — locks INSERT, jobs=RUNNING, histories INSERT, agents.current_job_id·status=BUSY</td></tr>
+    <tr><td>5</td><td>작업 실행</td><td><code>workflow_job_logs</code> INSERT (command, attempt_no)</td></tr>
+    <tr><td>6</td><td>진행률 갱신</td><td><code>workflow_job_progresses</code> upsert (§10)</td></tr>
+    <tr><td>7</td><td>산출물 저장</td><td><code>media_renditions</code> INSERT/upsert, 필요 시 <code>media_files</code>·<code>contents</code> 갱신(MA)</td></tr>
+    <tr><td>8</td><td>완료 처리</td><td>jobs=SUCCESS/FAILED/RETRY (CAS: <code>WHERE id=? AND status='RUNNING' AND worker_id=:me</code>) + result/fail_reason_code + histories + logs(stdout/stderr)</td></tr>
+    <tr><td>9</td><td>Lock 해제</td><td><code>workflow_job_locks</code> DELETE, agents.current_job_id=NULL·status=ONLINE</td></tr>
+    <tr><td>10</td><td>다음 Claim</td><td>4로 복귀 (없으면 폴링 대기)</td></tr>
+  </table>
+
+  <h2>10. 진행률 처리</h2>
+  <p><code>workflow_jobs</code>에 진행률을 직접 두면 고빈도 UPDATE로 큐 인덱스·row bloat에 악영향 — <b>별도 테이블 <code>workflow_job_progresses</code>를 공식 테이블로 확정</b>한다 (job_id PK, upsert 전용):</p>
+  <pre>CREATE TABLE workflow_job_progresses (
+  job_id                  bigint PRIMARY KEY REFERENCES workflow_jobs(id),
+  progress_percent        numeric(5,2) NOT NULL DEFAULT 0,
+  progress_message        varchar(500),
+  estimated_remaining_sec int,
+  updated_at              timestamptz NOT NULL DEFAULT now()
+);</pre>
+  <ul>
+    <li>갱신 주기: 2~5초 또는 1%p 변화 시. 관리자 화면은 이 테이블만 폴링.</li>
+    <li><b>TC</b>: ffmpeg <code>-progress pipe:1</code> 출력의 <code>out_time_ms</code> ÷ 원본 duration → %. 남은 시간 = 경과 × (100−p)/p.</li>
+    <li><b>DOC_PREVIEW</b>: 변환 완료 페이지 수 ÷ 총 페이지 수.</li>
+    <li><b>OCR</b>: 처리 완료 페이지 수 ÷ 대상 페이지 수.</li>
+    <li>완료 시 progress 행은 CLEANUP 배치에서 삭제(또는 job 종결 시 DELETE).</li>
+  </ul>
+
+  <h2>11. 실패 및 재시도 정책</h2>
+  <table>
+    <tr><th style="width: 130px;">실패 분류</th><th style="width: 230px;">예시</th><th>처리</th></tr>
+    <tr><td>일시적 (TRANSIENT)</td><td>네트워크 단절, DB 커넥션, 스토리지 일시 오류</td><td>RETRY + 지수 백오프</td></tr>
+    <tr><td>영구 (PERMANENT)</td><td>손상 파일, 비허용 포맷, 암호화 문서</td><td>즉시 FAILED — 재시도 금지</td></tr>
+    <tr><td>사용자 파일 문제</td><td>VERIFY 실패류</td><td>FAILED + 사용자 안내 문구 매핑</td></tr>
+    <tr><td>시스템 문제</td><td>도구 크래시, 메모리 부족</td><td>RETRY, 반복 시 Worker ERROR 마킹</td></tr>
+    <tr><td>Worker 문제</td><td>heartbeat 중단, lease 만료</td><td>Scheduler 회수 → RETRY</td></tr>
+    <tr><td>스토리지 문제</td><td>용량 부족, 마운트 유실</td><td>RETRY + 운영 알림 (전역 장애 가능성)</td></tr>
+  </table>
+  <ul>
+    <li><code>retry_count</code>는 <b>RETRY → RUNNING 재진입 시점</b>(Claim)에 증가.</li>
+    <li><code>next_attempt_at = now() + base × 2^(retry_count)</code>, base=1분, 상한 30분 (INDEX는 base=30초).</li>
+    <li><code>retry_count ≥ max_retry</code>면 FAILED 확정. 필수 작업이면 콘텐츠 FAILED + 후속 SKIPPED + 관리자 알림.</li>
+    <li>선택 작업 FAILED는 콘텐츠 READY를 차단하지 않음 — 대시보드 경고로만 노출.</li>
+    <li>수동 재시도(Admin): retry_count=0 초기화, FAILED → RETRY, actor=admin:{user_id}로 이력 기록. 실행 이력·로그는 보존.</li>
+    <li>알림 기준: 필수 작업 최종 FAILED(즉시), 동일 유형 실패율 &gt; 10%/10분(집계), 스토리지·검색엔진 오류(즉시).</li>
+  </ul>
+
+  <h2>12. 우선순위 정책</h2>
+  <p><code>workflow_jobs</code>의 <code>priority smallint NOT NULL DEFAULT 100</code> 컬럼은 <b>확정 사양</b>이다. Claim 정렬 표준: <code>ORDER BY priority DESC, created_at ASC</code> (전 문서 공통).</p>
+  <table>
+    <tr><th style="width: 220px;">상황</th><th style="width: 80px;">priority</th><th>비고</th></tr>
+    <tr><td>긴급 업로드 (관리자 지정)</td><td>300</td><td>인스턴스 생성 시 전체 job에 부여</td></tr>
+    <tr><td>관리자 수동 재처리</td><td>200</td><td>사람이 기다리는 작업 우선</td></tr>
+    <tr><td>일반 업로드</td><td>100</td><td>기본값</td></tr>
+    <tr><td>메타데이터 수정 재색인</td><td>50</td><td>지연 허용</td></tr>
+    <tr><td>대용량 TC (원본 &gt; 임계값)</td><td>80</td><td>짧은 job 고사(starvation) 방지 — 대용량은 전용 Worker로 분리(§13)</td></tr>
+  </table>
+  <p class="muted">짧은 job 우선(SJF)은 채택하지 않는다 — 예측 불확실성 대비 이득이 작고, 대형 job starvation 위험. 대신 Worker 풀 분리로 해결.</p>
+
+  <h2>13. Worker 확장 전략</h2>
+  <ul>
+    <li><b>TRANSCODE</b>: 최우선 확장 대상. READY(TC) 큐 길이 &gt; N 시 노드 추가. GPU 노드는 <code>gpu_available=true</code>로 등록하고 GPU 프로파일 job만 배정. 대용량(payload의 file_size &gt; 임계값) job은 전용 대용량 Worker 풀이 소비 — 일반 풀과 격리.</li>
+    <li><b>TM</b>: 스토리지 I/O 대역폭이 상한 — 노드 수보다 <code>max_concurrency</code>(2~4)로 제어.</li>
+    <li><b>OCR</b>: CPU 병목이나 선택 작업 — 저우선순위로 유휴 시간 소화, 필요 시 야간 확장.</li>
+    <li><b>INDEX</b>: 검색엔진 처리량에 종속 — Worker 증설보다 벌크 색인·배치 크기 조정이 유효.</li>
+    <li><b>장애 격리</b>: worker_type별 별도 프로세스/노드. 한 유형의 크래시 루프가 다른 유형을 막지 않는다. DOCUMENT Worker는 LibreOffice를 자식 프로세스로 격리하고 job마다 재기동.</li>
+    <li>모든 Worker는 무상태(stateless) — 노드 추가/제거만으로 확장, 상태는 전부 DB에.</li>
+  </ul>
+
+  <h2>14. 관리자 화면 연계</h2>
+  <table>
+    <tr><th style="width: 170px;">화면</th><th>표시 항목 / 액션</th></tr>
+    <tr><td>Worker 상태 대시보드</td><td>worker_name, type, status 뱃지, last_heartbeat_at(지연 경고), current_job, 처리량/시간, 버전 · <b>액션</b>: Worker 비활성화(DISABLED)</td></tr>
+    <tr><td>Queue 대기 현황</td><td>job_type별 READY/RETRY 건수, 최장 대기 시간, priority 분포</td></tr>
+    <tr><td>RUNNING Job 목록</td><td>job_id, type, 콘텐츠, worker, 진행률·메시지, 경과/예상 시간, locked_until · <b>액션</b>: Job 취소, Lock 강제 회수</td></tr>
+    <tr><td>장기 실행 Job</td><td>경과 &gt; timeout_sec × 0.8 인 RUNNING — 타임아웃 임박 경고</td></tr>
+    <tr><td>실패 Job 목록</td><td>type·기간·fail_reason_code 필터, retry_count, 마지막 오류 메시지 · <b>액션</b>: 단건/일괄 수동 재시도</td></tr>
+    <tr><td>Job 상세 / 로그</td><td>상태 전이 타임라인(histories), attempt별 command/stdout/stderr/detail(logs), 생성 rendition 목록</td></tr>
+  </table>
+
+  <h2>15. 운영 모니터링 지표</h2>
+  <table>
+    <tr><th style="width: 220px;">지표</th><th style="width: 200px;">산출</th><th>경보 기준(예)</th></tr>
+    <tr><td>READY Queue Length</td><td>type별 READY+RETRY 건수</td><td>TC &gt; 50 지속 10분</td></tr>
+    <tr><td>RUNNING Job Count</td><td>status=RUNNING</td><td>총 동시 용량의 90%</td></tr>
+    <tr><td>Average Processing Time</td><td>finished−started, type별 p50/p95</td><td>p95 기준선 2배</td></tr>
+    <tr><td>Failure / Retry Rate</td><td>기간 내 FAILED·RETRY ÷ 전체</td><td>&gt; 5% / &gt; 15%</td></tr>
+    <tr><td>Timeout Count</td><td>TIMEOUT 전이 수</td><td>&gt; 0 즉시 검토</td></tr>
+    <tr><td>Worker Heartbeat Delay</td><td>now() − last_heartbeat_at 최대값</td><td>&gt; 90초</td></tr>
+    <tr><td>Lease Expired Count</td><td>Scheduler 회수 건수</td><td>&gt; 0 반복 시 Worker 점검</td></tr>
+    <tr><td>TC Throughput</td><td>시간당 TC SUCCESS 분량(원본 분)</td><td>기준선 −30%</td></tr>
+    <tr><td>Storage I/O Error</td><td>logs level=ERROR 중 스토리지 코드</td><td>&gt; 0 즉시</td></tr>
+    <tr><td>Search Index Failure</td><td>search_index_states.status=FAILED</td><td>&gt; 0 지속 30분</td></tr>
+  </table>
+
+  <h2>16. Laravel 구현 기준</h2>
+  <table>
+    <tr><th style="width: 220px;">클래스</th><th>책임</th></tr>
+    <tr><td><code>WorkflowSchedulerService</code></td><td>§8의 7단계 틱 실행 (artisan 데몬에서 호출)</td></tr>
+    <tr><td><code>JobClaimService</code></td><td>§5 Claim 트랜잭션 캡슐화</td></tr>
+    <tr><td><code>JobStateMachine</code></td><td>전이표 검증 — 모든 상태 변경의 유일한 관문</td></tr>
+    <tr><td><code>JobLockService</code></td><td>lease 생성·연장·회수·fencing 검사</td></tr>
+    <tr><td><code>JobRetryPolicy</code></td><td>실패 분류 → RETRY/FAILED 판정 + 백오프 계산</td></tr>
+    <tr><td><code>JobProgressService</code></td><td>progresses upsert (스로틀 포함)</td></tr>
+    <tr><td><code>WorkerAgentService</code></td><td>등록·heartbeat·OFFLINE 판정</td></tr>
+    <tr><td><code>TranscodeWorker / MediaAnalyzeWorker / ThumbnailWorker / IndexWorker …</code></td><td>job_type별 실행기 — 공통 <code>AbstractWorker</code>(claim→execute→finalize 루프) 상속</td></tr>
+  </table>
+  <p><b>Laravel Queue vs DB Polling</b>:</p>
+  <table>
+    <tr><th style="width: 130px;">기준</th><th>Laravel Queue (Redis 등)</th><th>DB 기반 Worker Polling (본 설계)</th></tr>
+    <tr><td>의존성</td><td>Redis/브로커 추가 필요</td><td>PostgreSQL만 — 폐쇄망 적합</td></tr>
+    <tr><td>상태 추적</td><td>큐와 DB 상태 이원화 — 정합성 관리 필요</td><td>큐=상태 테이블, SSOT 단일</td></tr>
+    <tr><td>의존 관계·우선순위</td><td>DAG 표현 어려움</td><td>dependencies·priority로 자연 표현</td></tr>
+    <tr><td>처리량</td><td>초당 수천 job에 유리</td><td>분당 수백 job 수준에 충분 — 미디어 워크플로우 특성상 job 수 적고 실행 시간 김</td></tr>
+    <tr><td>결론</td><td colspan="2"><b>폐쇄망 CMS/MAM에는 PostgreSQL Polling이 적합.</b> job 발생률이 낮고 개별 실행이 길어 폴링 오버헤드가 무시 가능하며, 감사·이력·복구가 SQL로 일원화된다. Laravel Queue는 웹 서버의 경량 비동기(메일·알림)에만 사용.</td></tr>
+  </table>
+
+  <h2>17. PostgreSQL SQL 예시</h2>
+  <p><b>SQL-1 · READY 전환 (Scheduler)</b></p>
+  <pre>UPDATE workflow_jobs j SET status='READY', updated_at=now()
+WHERE j.status='WAITING'
+  AND NOT EXISTS (
+    SELECT 1 FROM workflow_job_dependencies d
+    JOIN workflow_jobs p ON p.id = d.depends_on_job_id
+    WHERE d.job_id = j.id AND p.status NOT IN ('SUCCESS','SKIPPED'));</pre>
+  <p><b>SQL-2 · 타임아웃 감시 (Scheduler)</b></p>
+  <pre>UPDATE workflow_jobs SET status='TIMEOUT', updated_at=now()
+WHERE status='RUNNING'
+  AND started_at + make_interval(secs =&gt; timeout_sec) &lt; now();</pre>
+  <p><b>SQL-3 · 만료 Lock 회수 (Scheduler)</b></p>
+  <pre>WITH expired AS (
+  DELETE FROM workflow_job_locks WHERE locked_until &lt; now()
+  RETURNING job_id
+)
+UPDATE workflow_jobs j
+SET status = CASE WHEN retry_count &lt; max_retry THEN 'RETRY' ELSE 'FAILED' END,
+    next_attempt_at = now() + interval '1 minute' * power(2, retry_count),
+    updated_at = now()
+FROM expired e WHERE j.id = e.job_id AND j.status = 'RUNNING';</pre>
+  <p><b>SQL-4 · heartbeat 연장 (Worker)</b></p>
+  <pre>UPDATE workflow_job_locks
+SET heartbeat_at=now(), locked_until=now() + interval '10 minutes'
+WHERE job_id=:job_id AND locked_by_worker_id=:worker_id;  -- 0 rows = lease 상실 → 작업 중단</pre>
+  <p><b>SQL-5 · 완료 기록 (Worker, fencing)</b></p>
+  <pre>UPDATE workflow_jobs
+SET status='SUCCESS', result=:result, finished_at=now(), updated_at=now()
+WHERE id=:job_id AND status='RUNNING' AND worker_id=:worker_id;  -- 0 rows = 이미 회수됨, 결과 폐기</pre>
+
+  <h2>18. 운영 시 고려사항</h2>
+  <ul>
+    <li>폴링 간격 2~5초 + jitter — thundering herd 방지. 유휴 시 간격 점증(back-off polling).</li>
+    <li>Scheduler는 단일 인스턴스 보장(advisory lock). 이중 기동 시 두 번째는 대기.</li>
+    <li>Worker 배포는 drain 방식: 신규 Claim 중단 → 진행 중 job 완료 → 종료. DISABLED 상태 활용.</li>
+    <li>autovacuum 튜닝: workflow_jobs·locks는 UPDATE 빈도가 높음 — fillfactor 80, aggressive vacuum.</li>
+    <li>모든 시각은 <code>timestamptz</code>(UTC) — Worker 노드 간 시계 오차 대비 NTP 필수.</li>
+    <li>재해 복구: 재기동 시 Scheduler의 lock 회수 로직만으로 RUNNING 고아 job이 자동 복구되는지 리허설로 검증.</li>
+  </ul>
+
+  <h2>19. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>Worker Agent 구현 명세</b> — AbstractWorker 루프·시그널 처리·프로세스 격리 상세</li>
+    <li><b>관리자 화면 와이어프레임</b> — §14 화면 설계 (Frame CMS 디자인 시스템 기반)</li>
+    <li><b>API 명세서</b> — 관리자 큐/Worker 제어 API</li>
+    <li><b>장애 대응 Runbook</b> — 시나리오별(스토리지 유실, 검색엔진 다운, Worker 크래시 루프) 대응 절차</li>
+    <li><b>부하 테스트 계획</b> — 동시 업로드 N건 기준 처리량·병목 검증</li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

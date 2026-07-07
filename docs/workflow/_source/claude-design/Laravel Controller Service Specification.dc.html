@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; font-family: 'IBM Plex Sans KR', system-ui, sans-serif; color: #26272e; }
+  doc-page:not(:defined) { visibility: hidden; }
+  doc-page h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 4px; }
+  doc-page h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #4a5a9e; color: #1e2233; }
+  doc-page h3 { font-size: 14px; font-weight: 700; margin: 24px 0 8px; color: #33384a; }
+  doc-page p, doc-page li { font-size: 13px; line-height: 1.7; margin: 0 0 8px; overflow-wrap: anywhere; }
+  doc-page ul, doc-page ol { margin: 0 0 10px; padding-left: 20px; }
+  doc-page table { border-collapse: collapse; width: 100%; margin: 0 0 14px; table-layout: fixed; }
+  doc-page th, doc-page td { box-sizing: border-box; }
+  doc-page th { text-align: left; padding: 5px 9px; background: #eef0f5; border: 1px solid #d7dae2; font-size: 11.5px; font-weight: 600; color: #3d4152; vertical-align: top; }
+  doc-page td { padding: 5px 9px; border: 1px solid #d7dae2; font-size: 12px; line-height: 1.55; vertical-align: top; overflow-wrap: anywhere; }
+  doc-page code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: #f1f2f6; border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+  doc-page pre { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.55; background: #f4f5f8; border: 1px solid #d7dae2; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 14px; display: block; width: 0; min-width: 100%; box-sizing: border-box; }
+  doc-page .muted { color: #6b7080; }
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.7in" hint-size="100%,100%">
+  <div slot="header" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-bottom: 1px solid #d7dae2; padding-bottom: 6px;">
+    <span>Frame CMS / MAM — Laravel Controller &amp; Service Implementation Specification</span><span>v1.0 · 2026-07-04</span>
+  </div>
+
+  <h1>CMS/MAM Laravel Controller &amp; Service Implementation Specification</h1>
+  <p class="muted" style="font-size: 13.5px; margin-bottom: 4px;">Laravel Controller·Service 구현 명세서 — 관리자 API 코드 구조 기준</p>
+  <p class="muted" style="font-size: 11.5px; font-family: 'IBM Plex Mono', monospace;">문서 버전 1.0 · 작성일 2026-07-04 · 상태: DRAFT · 선행 문서: Admin API Spec · State Machine Spec · Migration &amp; Seed Spec · Worker Agent Spec (각 v1.0)</p>
+
+  <h2>1. 문서 목적</h2>
+  <p>Admin API Spec v1.0의 17개 엔드포인트를 Laravel Controller / FormRequest / Service / Resource 구조로 구현하기 위한 기준을 정의한다. 핵심 원칙: ① 상태 전이는 StateMachine 서비스로 일원화(직접 update 금지) ② 조회(Query)와 조작(Command) Service 분리 ③ 감사 로그는 조작 트랜잭션과 동일 트랜잭션 ④ <code>available_actions</code> 계산은 서버 단일 위치 ⑤ 예외 → 표준 에러 응답 자동 매핑.</p>
+
+  <h2>2. 전체 Laravel 계층 구조</h2>
+  <table>
+    <tr><th style="width: 145px;">계층</th><th>책임</th></tr>
+    <tr><td>Routes</td><td>경로·미들웨어·권한 선언만 — 로직 없음</td></tr>
+    <tr><td>Controller</td><td>HTTP ↔ Service 어댑터: FormRequest 수취 → DTO 변환 → Service 호출 → Resource 반환. 비즈니스 로직 금지</td></tr>
+    <tr><td>FormRequest</td><td>입력 검증 + authorize()에서 권한 1차 확인</td></tr>
+    <tr><td>QueryService</td><td>조회 전용 — 필터·페이지네이션·집계·eager loading. 상태 변경 금지</td></tr>
+    <tr><td>CommandService</td><td>조작 전용 — 트랜잭션·StateMachine·AuditLogger 오케스트레이션</td></tr>
+    <tr><td>StateMachine</td><td>전이표 검증 + CAS 전이 + history 기록 — 상태 변경의 유일한 관문</td></tr>
+    <tr><td>AvailableActionService</td><td>상태×권한 → 액션 배열 계산 (단일 위치)</td></tr>
+    <tr><td>Policy / Gate</td><td>permission 문자열 → 사용자 권한 판정</td></tr>
+    <tr><td>Resource</td><td>응답 스키마 — 마스킹·필드 화이트리스트</td></tr>
+    <tr><td>DTO</td><td>계층 간 타입 안전 데이터 전달 (readonly class)</td></tr>
+    <tr><td>Exception</td><td>도메인 예외 → HTTP status + error code 매핑</td></tr>
+    <tr><td>AuditLogger</td><td>admin_audit_logs 기록 표준화</td></tr>
+    <tr><td>Model / Enum</td><td>Eloquent + 상태 enum cast (Migration Spec §13)</td></tr>
+  </table>
+
+  <h2>3. Route 구조</h2>
+  <pre>// routes/admin.php
+Route::prefix('admin/workflows')
+  ->middleware(['auth:admin', 'audit.context'])  // audit.context = actor/ip/UA 수집만 (저장 안 함)
+  ->group(function () {
+    // 조작(POST/PATCH/DELETE) 라우트에는 'audit.write' 미들웨어를 추가로 적용 —
+    // 실제 admin_audit_logs 저장은 CommandService/AuditLogger에서 수행. GET은 저장 대상 아님.
+    Route::get('dashboard', [DashboardController::class, 'index'])->can('workflow.view');
+    Route::get('contents', [ContentWorkflowController::class, 'index'])->can('workflow.view');
+    Route::get('contents/{content}', [ContentWorkflowController::class, 'show'])->can('workflow.view');
+    Route::post('contents/{content}/reprocess', [ContentWorkflowController::class, 'reprocess'])->can('workflow.reprocess');
+    Route::post('contents/{content}/cancel', [ContentWorkflowController::class, 'cancel'])->can('workflow.cancel');
+
+    Route::get('jobs', [JobController::class, 'index'])->can('workflow.view');
+    Route::get('jobs/{job}', [JobController::class, 'show'])->can('workflow.logs.view');
+    Route::post('jobs/retry-batch', [JobController::class, 'retryBatch'])->can('workflow.retry');
+    Route::post('jobs/{job}/retry', [JobController::class, 'retry'])->can('workflow.retry');
+    Route::post('jobs/{job}/cancel', [JobController::class, 'cancel'])->can('workflow.cancel');
+    Route::post('jobs/{job}/release-lock', [JobController::class, 'releaseLock'])->can('workflow.release_lock');
+    Route::patch('jobs/{job}/priority', [JobController::class, 'updatePriority'])->can('workflow.retry');
+
+    Route::get('workers', [WorkerController::class, 'index'])->can('workflow.view');
+    Route::post('workers/{worker}/disable', [WorkerController::class, 'disable'])->can('workflow.worker.manage');
+    Route::post('workers/{worker}/enable', [WorkerController::class, 'enable'])->can('workflow.worker.manage');
+    Route::post('workers/{worker}/clear-error', [WorkerController::class, 'clearError'])->can('workflow.worker.manage');
+
+    Route::get('alerts', [AlertController::class, 'index'])->can('workflow.view');
+    Route::post('alerts/{alert}/ack', [AlertController::class, 'ack'])->can('workflow.view');
+  });</pre>
+  <p class="muted"><code>retry-batch</code>를 <code>{job}</code> 라우트보다 먼저 선언(라우트 충돌 방지). 모델 바인딩 실패는 404 + <code>NOT_FOUND</code>로 자동 매핑.</p>
+
+  <h2>4. Controller 설계</h2>
+  <table>
+    <tr><th style="width: 165px;">Controller / 메서드</th><th style="width: 165px;">FormRequest → Service</th><th style="width: 155px;">Resource</th><th>비고</th></tr>
+    <tr><td>Dashboard · index</td><td>— → DashboardQueryService</td><td>DashboardResource</td><td>10초 캐시(refresh 파라미터로 무시)</td></tr>
+    <tr><td>ContentWorkflow · index / show</td><td>필터 DTO → ContentQueryService</td><td>ContentList/DetailResource</td><td>—</td></tr>
+    <tr><td>ContentWorkflow · reprocess</td><td>ReprocessContentRequest → ContentReprocessService</td><td>CommandResultResource</td><td>트랜잭션 (Service 내부)</td></tr>
+    <tr><td>ContentWorkflow · cancel</td><td>CancelContentRequest → ContentCancelService</td><td>CommandResultResource</td><td>—</td></tr>
+    <tr><td>Job · index / show</td><td>JobListFilterData → JobQueryService</td><td>JobList/DetailResource</td><td>—</td></tr>
+    <tr><td>Job · retry / retryBatch / cancel / releaseLock / updatePriority</td><td>각 Request → 각 CommandService</td><td>CommandResultResource</td><td>모두 트랜잭션 + 감사 로그</td></tr>
+    <tr><td>Worker · index / disable / enable / clearError</td><td>각 Request → WorkerCommandService</td><td>WorkerResource</td><td>—</td></tr>
+    <tr><td>Alert · index / ack</td><td>AckAlertRequest → AlertCommandService</td><td>AlertResource</td><td>ack 멱등</td></tr>
+  </table>
+  <p class="muted">예외 처리는 Controller에서 하지 않는다 — 도메인 예외는 전역 Handler가 §13 매핑으로 응답한다.</p>
+
+  <h2>5. FormRequest 설계</h2>
+  <pre>class ReprocessContentRequest extends FormRequest {
+  public function rules(): array {
+    return [
+      'mode' => 'required|string|in:failed_from,full',
+      'reason' => 'required|string|max:1000',
+      'priority' => 'nullable|integer|min:0|max:1000',
+      'keep_existing_renditions' => 'boolean',
+      'requested_job_type' => 'nullable|string|in:TM,VERIFY,MA,TC,IMAGE_TC,AUDIO_TC,CA,DOC_PREVIEW,OCR,TEXT_EXTRACT,INDEX,PUBLISH,CLEANUP',
+    ];
+  }
+}</pre>
+  <table>
+    <tr><th style="width: 195px;">FormRequest</th><th>주요 rules</th></tr>
+    <tr><td>CancelContentRequest</td><td>reason: required|string|max:1000</td></tr>
+    <tr><td>RetryJobRequest</td><td>reason: nullable|string|max:1000 · reset_retry_count: boolean · priority: nullable|integer|min:0|max:1000</td></tr>
+    <tr><td>RetryJobBatchRequest</td><td>job_ids: required|array|min:1|max:100 · job_ids.*: integer · reason: <b>required</b>|string|max:1000</td></tr>
+    <tr><td>CancelJobRequest</td><td>reason: required|string|max:1000</td></tr>
+    <tr><td>ReleaseJobLockRequest</td><td>reason: required|string|max:1000 · target_status: nullable|in:RETRY,FAILED (기본 RETRY)</td></tr>
+    <tr><td>UpdateJobPriorityRequest</td><td>priority: required|integer|min:0|max:1000 · reason: nullable|string|max:1000</td></tr>
+    <tr><td>DisableWorkerRequest</td><td>reason: required|string|max:1000 · drain: boolean (기본 true)</td></tr>
+    <tr><td>EnableWorkerRequest</td><td>reason: nullable|string|max:1000</td></tr>
+    <tr><td>ClearWorkerErrorRequest</td><td>reason: required|string|max:1000</td></tr>
+    <tr><td>AckAlertRequest</td><td>note: nullable|string|max:1000</td></tr>
+  </table>
+
+  <h2>6. Service 구조</h2>
+  <table>
+    <tr><th style="width: 215px;">Service</th><th>책임 / 주요 메서드 (입력 DTO → 출력)</th></tr>
+    <tr><td>WorkflowDashboardQueryService</td><td><code>aggregate(range, mediaType): DashboardData</code> — 집계 쿼리 5종 + 배너</td></tr>
+    <tr><td>WorkflowContentQueryService</td><td><code>paginate(WorkflowListFilterData): Paginator</code> · <code>detail(id): ContentDetailData</code></td></tr>
+    <tr><td>WorkflowJobQueryService</td><td><code>paginate(JobListFilterData)</code> · <code>detail(id)</code> — timeout_imminent·영향도 계산 포함</td></tr>
+    <tr><td>WorkflowWorkerQueryService / AlertQueryService</td><td>목록·필터 — heartbeat_delay 계산</td></tr>
+    <tr><td>AvailableActionService</td><td><code>forContent/forJob/forWorker($model, $user): string[]</code> (§8)</td></tr>
+    <tr><td>ContentReprocessService</td><td><code>execute(ReprocessContentData): CommandResult</code> — §10 흐름</td></tr>
+    <tr><td>ContentCancelService · JobRetryService · JobCancelService · JobLockReleaseService · JobPriorityService · WorkerCommandService · AlertCommandService</td><td>각 조작 1개 — <code>execute(DTO): CommandResult</code> 단일 공개 메서드</td></tr>
+    <tr><td>AuditLogger</td><td><code>log(action, target, before, after, DTO): void</code> (§11)</td></tr>
+    <tr><td>StateMachineDispatcher</td><td>target_type → 해당 StateMachine 해석 (배치 조작용)</td></tr>
+    <tr><td>FailReasonCatalog</td><td>fail_reason_code → 사용자 문구·조치 제안 (Worker와 공유)</td></tr>
+    <tr><td>WorkflowPermissionService</td><td>permission 문자열 판정 헬퍼 (Gate 위임)</td></tr>
+  </table>
+  <p class="muted">TransactionService는 별도로 두지 않는다 — <b>CommandService가 최상위 <code>DB::transaction()</code>을 소유</b>하고, StateMachine은 그 안에서 CAS+history만 수행한다(내부 트랜잭션 금지). 단독 전이는 <code>TransitionRunner</code> wrapper가 트랜잭션을 소유한다.</p>
+
+  <h2>7. StateMachine Service 구현</h2>
+  <pre>abstract class AbstractStateMachine {
+  /** @var array&lt;string, string[]&gt; */ protected const TRANSITIONS = [];
+
+  public function canTransition(string $from, string $to): bool {
+    return in_array($to, static::TRANSITIONS[$from] ?? [], true);
+  }
+  public function assertTransition(string $from, string $to): void {
+    if (! $this->canTransition($from, $to))
+      throw new InvalidStateTransitionException($from, $to);
+  }
+  // 자체 트랜잭션을 열지 않는다 — 호출부(CommandService)의 트랜잭션 안에서 실행
+  public function transition(Model $model, string $to, string $actor, ?string $note = null): TransitionResult {
+    $from = $model->status->value;
+    $this->assertTransition($from, $to);
+    assert(DB::transactionLevel() > 0);                          // 호출부 트랜잭션 필수
+    $updated = DB::update(                                       // CAS
+      "UPDATE {$model->getTable()} SET status = ?, updated_at = now()
+       WHERE id = ? AND status = ?", [$to, $model->id, $from]);
+    if ($updated === 0)                                          // 동시성 충돌
+      return TransitionResult::conflict($model->fresh()->status->value);
+    $this->writeHistory($model->id, $from, $to, $actor, $note);  // jobs만 — 같은 트랜잭션
+    return TransitionResult::ok($from, $to);
+  }
+  abstract public function allowedActions(Model $model, User $user): array;
+}
+// JobStateMachine: TRANSITIONS = State Machine Spec §5 전이표
+// ContentStateMachine · WorkflowInstanceStateMachine · WorkerStateMachine · SearchIndexStateMachine 동일 패턴</pre>
+  <p class="muted">TransitionResult::conflict는 예외가 아닌 값 — 호출부(CommandService)가 이미 목표 상태면 멱등 성공, 아니면 409로 변환한다. Worker 완료 기록처럼 fencing이 필요한 경로는 CAS WHERE에 <code>worker_id</code> 추가 오버로드 사용.</p>
+
+  <h2>8. Available Actions 계산 (AvailableActionService)</h2>
+  <table>
+    <tr><th style="width: 90px;">대상</th><th style="width: 130px;">액션</th><th>조건 (상태 AND 권한)</th></tr>
+    <tr><td rowspan="4">Content</td><td>view_detail / view_logs</td><td>항상 (workflow.view / logs.view)</td></tr>
+    <tr><td>reprocess</td><td>status ∈ {READY, FAILED} + workflow.reprocess</td></tr>
+    <tr><td>cancel</td><td>status = PROCESSING + workflow.cancel</td></tr>
+    <tr><td>publish_retry</td><td>PUBLISH job = FAILED + workflow.retry</td></tr>
+    <tr><td rowspan="5">Job</td><td>view_logs / view_content</td><td>항상 (logs.view / view)</td></tr>
+    <tr><td>retry</td><td>status = FAILED + workflow.retry</td></tr>
+    <tr><td>cancel</td><td>status ∈ {WAITING, READY, RUNNING} + workflow.cancel</td></tr>
+    <tr><td>release_lock</td><td>status = RUNNING AND lock 존재 + workflow.release_lock</td></tr>
+    <tr><td>update_priority</td><td>status ∈ {WAITING, READY, RETRY} + workflow.retry</td></tr>
+    <tr><td rowspan="4">Worker</td><td>disable</td><td>status ∈ {ONLINE, BUSY} + worker.manage</td></tr>
+    <tr><td>enable</td><td>status = DISABLED + worker.manage</td></tr>
+    <tr><td>clear_error</td><td>status = ERROR + worker.manage</td></tr>
+    <tr><td>view_current_job / view_logs</td><td>current_job_id 존재 / 항상</td></tr>
+  </table>
+  <pre>public function forJob(WorkflowJob $job, User $u): array {
+  $a = [];
+  if ($u->can('workflow.logs.view')) $a[] = 'view_logs';
+  if ($u->can('workflow.view')) $a[] = 'view_content';
+  if ($job->status === JobStatus::Failed && $u->can('workflow.retry')) $a[] = 'retry';
+  if (in_array($job->status, [JobStatus::Waiting, JobStatus::Ready, JobStatus::Running])
+      && $u->can('workflow.cancel')) $a[] = 'cancel';
+  if ($job->status === JobStatus::Running && $job->lock()->exists()
+      && $u->can('workflow.release_lock')) $a[] = 'release_lock';
+  if (in_array($job->status, [JobStatus::Waiting, JobStatus::Ready, JobStatus::Retry])
+      && $u->can('workflow.retry')) $a[] = 'update_priority';
+  return $a;
+}</pre>
+
+  <h2>9. QueryService 구현 기준</h2>
+  <ul>
+    <li><b>dashboard 집계</b>: 상태별 count는 단일 쿼리 <code>GROUP BY status</code> ×3(contents/jobs/workers) + 처리량은 <code>date_trunc('hour', finished_at)</code> 집계. 10초 캐시.</li>
+    <li><b>contents 목록</b>: 서브쿼리로 current_stage(RUNNING job)·진행률(필수 job 완료 수) 계산 — <code>withCount</code> + <code>addSelect</code>. N+1 방지: <code>with('uploader')</code> + rendition 존재는 <code>EXISTS</code> 서브쿼리.</li>
+    <li><b>contents 상세</b>: <code>with(['mediaFiles','renditions','instance.jobs.worker','searchIndexState'])</code> eager loading, histories·logs는 최근 N건 제한 쿼리 별도.</li>
+    <li><b>jobs 목록</b>: <code>timeout_imminent = started_at + timeout_sec×0.8 &lt; now()</code>를 SQL CASE로 계산. progress는 <code>leftJoin(workflow_job_progresses)</code>.</li>
+    <li><b>workers</b>: <code>heartbeat_delay_sec = EXTRACT(EPOCH FROM now() - last_heartbeat_at)</code>.</li>
+    <li>sort/filter는 <b>화이트리스트 배열</b>로 검증 — 임의 컬럼 정렬·필터 차단.</li>
+    <li>pagination은 <code>paginate(per_page ≤ 200)</code> — Resource collection + meta 자동.</li>
+  </ul>
+
+  <h2>10. CommandService 구현 기준</h2>
+  <p><b>공통 흐름</b>: 권한 재확인(Gate) → 트랜잭션 시작 → 대상 <code>lockForUpdate()</code> 재조회 → 상태 검증 → StateMachine.transition(CAS) → 도메인 처리 → AuditLogger.log → 커밋 → available_actions 재계산 후 CommandResult 반환. 충돌 시 <code>InvalidStateTransitionException</code>(409).</p>
+  <table>
+    <tr><th style="width: 145px;">조작</th><th>트랜잭션 내 처리</th></tr>
+    <tr><td>콘텐츠 재처리</td><td>content CAS(READY|FAILED→PROCESSING) → 새 instance 생성 → 템플릿 기반 jobs+dependencies 생성(failed_from은 실패 지점 이후만) → audit</td></tr>
+    <tr><td>콘텐츠 취소</td><td>비종결 job 일괄 CANCELED(각각 history) → RUNNING job cancel_requested_at 마킹 → instance CANCELED → content FAILED(note=canceled) → audit</td></tr>
+    <tr><td>Job 재시도</td><td>FAILED→RETRY CAS → retry_count=0(옵션) → next_attempt_at=now() → priority(옵션) → history+audit</td></tr>
+    <tr><td>일괄 재시도</td><td>job별 개별 트랜잭션(부분 성공 허용) — 결과 배열 반환, audit는 배치 1건+상세 payload</td></tr>
+    <tr><td>Job 취소</td><td>WAITING/READY→CANCELED + 후속 SKIPPED 전파 / RUNNING→cancel_requested_at(202) → audit</td></tr>
+    <tr><td>Lock 강제 회수</td><td>lock <code>FOR UPDATE</code> 조회(없으면 JobLockNotFound) → lock DELETE → RUNNING→RETRY|FAILED CAS → history+audit</td></tr>
+    <tr><td>우선순위 변경</td><td>상태 확인 → priority UPDATE(상태 전이 아님 — history 없음) → audit</td></tr>
+    <tr><td>Worker disable/enable/clear-error</td><td>WorkerStateMachine 전이 → (drain=false면 현재 job cancel 위임) → audit</td></tr>
+    <tr><td>Alert ack</td><td>이미 ack면 기존값 반환(멱등) → acknowledged_at/by UPDATE → audit</td></tr>
+  </table>
+
+  <h2>11. AuditLogger 구현</h2>
+  <pre>final class AuditLogger {
+  public function log(string $action, Model $target,
+      ?string $before, ?string $after, array $payload, ?string $reason): void {
+    if (in_array($action, self::REASON_REQUIRED, true) && blank($reason))
+      throw ValidationException::withMessages(['reason' => '사유 입력이 필요합니다.']);
+    DB::table('admin_audit_logs')->insert([          // 호출부 트랜잭션에 참여
+      'actor_user_id' => $this->ctx->userId(),
+      'action' => $action,                            // 'job.retry' 라우트명 기반 dot 표기
+      'target_type' => $target->getMorphClass(),      // content | job | worker | alert
+      'target_id' => $target->getKey(),
+      'before_state' => $before, 'after_state' => $after,
+      'request_payload' => json_encode($payload),
+      'reason' => $reason,
+      'ip_address' => $this->ctx->ip(), 'user_agent' => $this->ctx->userAgent(),
+      'created_at' => now(),
+    ]);
+  }
+  private const REASON_REQUIRED = ['content.reprocess','content.cancel','job.cancel',
+    'job.release_lock','worker.disable','worker.clear_error','content.master_download'];
+}</pre>
+  <p class="muted">audit 미들웨어가 ip/user_agent/user를 AuditContext에 수집. INSERT 실패 시 예외 전파 → 조작 트랜잭션 전체 롤백(정책 강제).</p>
+
+  <h2>12. Resource 응답 설계</h2>
+  <table>
+    <tr><th style="width: 215px;">Resource</th><th>반환 필드 / 정책</th></tr>
+    <tr><td>DashboardResource</td><td>API Spec §6 스키마 그대로</td></tr>
+    <tr><td>WorkflowContentListResource</td><td>§7 스키마 + available_actions</td></tr>
+    <tr><td>WorkflowContentDetailResource</td><td>§8 스키마 — <b>master는 path_masked만</b>(<code>preg_replace</code>로 파일명 구간 마스킹), preview_url은 비-MASTER rendition만 생성</td></tr>
+    <tr><td>WorkflowJobListResource / DetailResource</td><td>§11·12 스키마 — payload 내 master 경로도 마스킹, stdout/stderr는 URL만</td></tr>
+    <tr><td>WorkflowWorkerResource / AlertResource</td><td>§17·21 스키마</td></tr>
+    <tr><td>ErrorResource</td><td><code>{success:false, error:{code, message, details, current_state, allowed_actions}}</code> — 전역 Handler가 사용</td></tr>
+  </table>
+  <pre>// path 마스킹 헬퍼 (Resource 공용 trait)
+public static function maskPath(string $path): string {
+  return preg_replace('#([^/]{4})[^/]*(\.[a-z0-9]+)$#i', '$1****$2', $path);
+}  // master/2026/07/1001_a1b2c3d4_src.mov → master/2026/07/1001****.mov</pre>
+
+  <h2>13. Exception / Error 처리</h2>
+  <table>
+    <tr><th style="width: 250px;">Exception</th><th style="width: 60px;">HTTP</th><th>error code</th></tr>
+    <tr><td>WorkflowException (추상 베이스)</td><td>—</td><td>하위 클래스가 결정</td></tr>
+    <tr><td>InvalidStateTransitionException</td><td>409</td><td><code>INVALID_STATE_TRANSITION</code> + current_state + allowed_actions</td></tr>
+    <tr><td>JobLockNotFoundException</td><td>409</td><td><code>JOB_LOCK_NOT_FOUND</code></td></tr>
+    <tr><td>WorkerOfflineException</td><td>409</td><td><code>WORKER_HEARTBEAT_MISSING</code></td></tr>
+    <tr><td>RequiredRenditionMissingException</td><td>409</td><td><code>REQUIRED_RENDITION_MISSING</code></td></tr>
+    <tr><td>PermissionDeniedException (AuthorizationException 매핑)</td><td>403</td><td><code>PERMISSION_DENIED</code></td></tr>
+    <tr><td>ResourceNotFoundException (ModelNotFound 매핑)</td><td>404</td><td><code>NOT_FOUND</code></td></tr>
+    <tr><td>ValidationException (Laravel 기본)</td><td>422</td><td><code>VALIDATION_ERROR</code> + details 필드별</td></tr>
+    <tr><td>Throwable (그 외)</td><td>500</td><td><code>INTERNAL_ERROR</code> + trace_id (본문에 스택 미노출)</td></tr>
+  </table>
+  <p class="muted">전역 <code>Exceptions::render()</code>에서 <code>/admin/workflows</code> prefix 요청만 ErrorResource JSON으로 변환한다.</p>
+
+  <h2>14. Policy / Gate 설계</h2>
+  <ul>
+    <li>permission 문자열은 Gate 정의: <code>Gate::define('workflow.retry', fn($u) =&gt; $u->hasPermission('workflow.retry'))</code> — 권한 저장은 기존 관리자 권한 테이블 사용.</li>
+    <li>라우트 <code>-&gt;can()</code>(1차) + FormRequest authorize()(2차) + CommandService 내 재확인(3차, HIGH만).</li>
+    <li>HIGH 권한(<code>release_lock</code>, <code>worker.manage</code>, <code>force_publish</code>, <code>master.download</code>)은 역할 기본 포함 금지 — 개별 부여 + 부여 이력. Gate에서 <code>hasDirectPermission</code>으로만 인정.</li>
+  </ul>
+
+  <h2>15. DTO 설계</h2>
+  <pre>final readonly class ReprocessContentData {
+  public function __construct(
+    public int $contentId, public string $mode, public string $reason,
+    public ?int $priority, public bool $keepExistingRenditions,
+    public ?string $requestedJobType, public int $actorUserId) {}
+  public static function fromRequest(ReprocessContentRequest $r, Content $c): self { … }
+}</pre>
+  <table>
+    <tr><th style="width: 200px;">DTO</th><th>필드</th></tr>
+    <tr><td>CancelContentData / CancelJobData</td><td>targetId · reason · actorUserId</td></tr>
+    <tr><td>RetryJobData</td><td>jobId · reason? · resetRetryCount · priority? · actorUserId</td></tr>
+    <tr><td>ReleaseLockData</td><td>jobId · reason · targetStatus(RETRY|FAILED) · actorUserId</td></tr>
+    <tr><td>UpdatePriorityData</td><td>jobId · priority · reason? · actorUserId</td></tr>
+    <tr><td>DisableWorkerData</td><td>workerId · reason · drain · actorUserId</td></tr>
+    <tr><td>WorkflowListFilterData / JobListFilterData</td><td>필터 필드 + page · perPage · sort (화이트리스트 적용 후)</td></tr>
+    <tr><td>TransitionResult</td><td>ok · from · to · conflictCurrentState?</td></tr>
+    <tr><td>CommandResult</td><td>success · data(배열) · availableActions — CommandResultResource가 직렬화</td></tr>
+  </table>
+
+  <h2>16. 트랜잭션 처리 기준</h2>
+  <table>
+    <tr><th style="width: 145px;">조작</th><th>하나의 트랜잭션 (실패 시 전체 롤백)</th></tr>
+    <tr><td>콘텐츠 재처리</td><td>content 상태 변경 + instance 생성 + jobs 생성 + dependencies 생성 + audit</td></tr>
+    <tr><td>콘텐츠 취소</td><td>jobs 일괄 CANCELED + histories + instance CANCELED + content 상태 + audit</td></tr>
+    <tr><td>Job 재시도</td><td>상태 CAS + retry_count/next_attempt_at + history + audit</td></tr>
+    <tr><td>Lock 회수</td><td>lock FOR UPDATE + DELETE + job 상태 CAS + history + audit</td></tr>
+    <tr><td>Worker 조작</td><td>상태 전이 + (drain=false: job cancel 마킹) + audit</td></tr>
+    <tr><td>일괄 재시도</td><td><b>예외</b>: job별 개별 트랜잭션 — 1건 실패가 나머지를 막지 않음</td></tr>
+  </table>
+
+  <h2>17. 코드 예시 — JobRetryService</h2>
+  <pre>final class JobRetryService {
+  public function __construct(
+    private JobStateMachine $sm, private AuditLogger $audit) {}
+
+  public function execute(RetryJobData $d): CommandResult {
+    return DB::transaction(function () use ($d) {
+      $job = WorkflowJob::lockForUpdate()->findOrFail($d->jobId);
+
+      $result = $this->sm->transition($job, 'RETRY', "admin:{$d->actorUserId}", $d->reason);
+      if (! $result->ok) {
+        if ($result->conflictCurrentState === 'RETRY')      // 멱등 흡수
+          return CommandResult::ok(['status' => 'RETRY']);
+        throw new InvalidStateTransitionException('FAILED', 'RETRY',
+          current: $result->conflictCurrentState);
+      }
+
+      $job->update([                                        // 상태 외 필드 (trigger 통과)
+        'retry_count' => $d->resetRetryCount ? 0 : $job->retry_count,
+        'next_attempt_at' => now(),
+        'priority' => $d->priority ?? $job->priority,
+      ]);
+
+      $this->audit->log('job.retry', $job, 'FAILED', 'RETRY',
+        ['reset' => $d->resetRetryCount, 'priority' => $d->priority], $d->reason);
+
+      return CommandResult::ok([
+        'job_id' => $job->id, 'status' => 'RETRY',
+        'retry_count' => $job->retry_count, 'next_attempt_at' => $job->next_attempt_at,
+      ]);
+    });
+  }
+}</pre>
+
+  <h2>18. 테스트 기준</h2>
+  <table>
+    <tr><th style="width: 260px;">테스트</th><th>검증</th></tr>
+    <tr><td>권한 없는 사용자</td><td>모든 조작 API 403 + PERMISSION_DENIED</td></tr>
+    <tr><td>상태 충돌</td><td>SUCCESS job retry → 409 + current_state 포함</td></tr>
+    <tr><td>Job 재시도 성공</td><td>FAILED→RETRY + history + audit 1건 + next_attempt_at</td></tr>
+    <tr><td>Lock 없는 release-lock</td><td>409 JOB_LOCK_NOT_FOUND</td></tr>
+    <tr><td>재처리</td><td>새 instance 생성 · 기존 instance 불변 · failed_from은 실패 이후 job만</td></tr>
+    <tr><td>감사 로그</td><td>모든 조작 API 호출 후 admin_audit_logs 1건, reason 필수 액션 누락 시 422</td></tr>
+    <tr><td>available_actions</td><td>동일 리소스, 권한 다른 두 사용자 → 배열 차이</td></tr>
+    <tr><td>Master 마스킹</td><td>모든 응답 JSON에 master 원경로 문자열 부재 assert</td></tr>
+    <tr><td>목록 필터·페이지네이션</td><td>화이트리스트 외 sort 무시, per_page 상한</td></tr>
+    <tr><td>Worker disable/enable</td><td>drain 동작, heartbeat 없는 enable 409</td></tr>
+    <tr><td>Alert ack 멱등</td><td>2회 호출 → 200 + 동일 acknowledged_at</td></tr>
+  </table>
+
+  <h2>19. 운영 시 고려사항</h2>
+  <ul>
+    <li>직접 DB update·StateMachine 우회 금지 — <code>$fillable</code>에서 status 제외 + 아키텍처 테스트(pest arch)로 강제.</li>
+    <li>목록 API는 인덱스 활용 확인(EXPLAIN) — 특히 jobs 필터 조합.</li>
+    <li>stdout/stderr 등 대용량은 응답 분리(URL) — Resource에 인라인 금지.</li>
+    <li>Master 다운로드는 본 API군에 포함하지 않는다 — 별도 명세·별도 권한.</li>
+    <li>HIGH 액션은 UI 이중 확인 + 서버 3차 권한 확인이 모두 필요(단일 방어 금지).</li>
+  </ul>
+
+  <h2>20. 다음 산출물 제안</h2>
+  <ul>
+    <li><b>관리자 화면 하이파이 목업</b> — 본 API 계약 기반 인터랙티브 프로토타입 (Frame CMS 디자인 시스템)</li>
+    <li><b>OpenAPI 문서</b> — 기계 판독 버전</li>
+    <li><b>장애 대응 Runbook</b> · <b>부하 테스트 계획</b></li>
+  </ul>
+
+  <div slot="footer" style="display: flex; justify-content: space-between; font-size: 10px; color: #6b7080; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #d7dae2; padding-top: 6px;">
+    <span>Frame CMS/MAM — Internal Design Document</span><span>Confidential</span>
+  </div>
+</x-import>
+
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<script src="ds-icons.js"></script>
+<style>
+  :root { --warn: oklch(0.72 0.1 75); --border-strong: oklch(0.85 0.006 265); }
+  html[data-theme="dark"] { --warn: oklch(0.8 0.12 82); --border-strong: oklch(0.38 0.01 265); }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+<div style="display: inline-flex; gap: 3px;">
+  <sc-for list="{{ stars }}" as="s" hint-placeholder-count="5">
+    <span onClick="{{ s.onClick }}" style="{{ s.style }}"><ds-icon glyph="star" size="{{ iconSize }}" sw="1.5" fill="{{ s.fill }}"></ds-icon></span>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 160, &quot;height&quot;: 48}, &quot;value&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: 4, &quot;min&quot;: 0, &quot;max&quot;: 5, &quot;tsType&quot;: &quot;number&quot;}, &quot;max&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: 5, &quot;min&quot;: 3, &quot;max&quot;: 10, &quot;tsType&quot;: &quot;number&quot;}, &quot;readonly&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;size&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: 18, &quot;min&quot;: 12, &quot;max&quot;: 32, &quot;tsType&quot;: &quot;number&quot;}}">
+class Component extends DCLogic {
+  state = { val: null };
+  get value() { return this.state.val == null ? Number(this.props.value ?? 0) : this.state.val; }
+  renderVals() {
+    const p = this.props;
+    const max = Number(p.max ?? 5);
+    const readonly = p.readonly === true || p.readonly === 'true';
+    const size = Number(p.size ?? 18);
+    const val = this.value;
+    const stars = [];
+    for (let i = 1; i <= max; i++) {
+      const filled = i <= val;
+      stars.push({
+        fill: filled ? 'currentColor' : 'none',
+        style: `display: inline-flex; color: ${filled ? 'var(--warn)' : 'var(--border-strong)'}; cursor: ${readonly ? 'default' : 'pointer'};`,
+        onClick: readonly ? (() => {}) : (() => { this.setState({ val: i }); if (p.onChange) p.onChange(i); }),
+      });
+    }
+    return { stars, iconSize: size };
+  }
+}
+</script>
+</body>
+</html>
