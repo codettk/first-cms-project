@@ -33,6 +33,9 @@ jobs:
           extensions: pdo_pgsql, pgsql, mbstring, intl
           coverage: none
 
+      - name: Install ffmpeg (E2E pipeline test)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
