@@ -12,6 +12,8 @@ class WorkflowJobProgress extends Model
 {
     public const null CREATED_AT = null;
 
+    protected $table = 'workflow_job_progresses';
+
     public $incrementing = false;
 
     protected $primaryKey = 'job_id';
