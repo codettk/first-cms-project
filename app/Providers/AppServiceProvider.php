@@ -5,11 +5,14 @@ namespace App\Providers;
 use App\Services\Workflow\Search\DevSearchIndexClient;
 use App\Services\Workflow\Search\SearchIndexClient;
 use App\Services\Workflow\Worker\HandlerRegistry;
+use App\Services\Workflow\Worker\Handlers\CatalogJobHandler;
 use App\Services\Workflow\Worker\Handlers\CleanupJobHandler;
+use App\Services\Workflow\Worker\Handlers\IndexJobHandler;
 use App\Services\Workflow\Worker\Handlers\MediaAnalyzeJobHandler;
 use App\Services\Workflow\Worker\Handlers\PublishJobHandler;
 use App\Services\Workflow\Worker\Handlers\TmJobHandler;
 use App\Services\Workflow\Worker\Handlers\VerifyJobHandler;
+use App\Services\Workflow\Worker\Handlers\VideoTranscodeJobHandler;
 use App\Services\Workflow\Worker\Tools\SymfonyProcessToolRunner;
 use App\Services\Workflow\Worker\Tools\ToolRunner;
 use Illuminate\Support\ServiceProvider;
@@ -24,6 +27,9 @@ class AppServiceProvider extends ServiceProvider
         TmJobHandler::class,
         VerifyJobHandler::class,
         MediaAnalyzeJobHandler::class,
+        VideoTranscodeJobHandler::class,
+        CatalogJobHandler::class,
+        IndexJobHandler::class,
         PublishJobHandler::class,
         CleanupJobHandler::class,
     ];
