@@ -1,0 +1,1431 @@
+openapi: 3.1.0
+info:
+  title: Frame CMS/MAM Workflow Admin API
+  version: 1.0.0
+  contact:
+    name: Frame CMS Admin
+    email: admin@codettk.com
+  description: >
+    관리자 전용 워크플로우 운영 API. 모든 조작은 상태 기계 검증과
+    감사 로그를 전제로 한다. 시각은 UTC ISO 8601.
+    공통 응답 envelope — 성공 {success, data, meta?} / 실패 {success:false, error}.
+    조작(POST/PATCH/DELETE) API만 감사 로그 저장 대상이며 GET은 기록하지 않는다.
+servers:
+  - url: /admin/workflows
+security:
+  - bearerAuth: []
+  - adminSession: []
+tags:
+  - name: dashboard
+    description: 워크플로우 대시보드 집계
+  - name: contents
+    description: 콘텐츠 처리 조회·재처리·취소
+  - name: jobs
+    description: Job 조회·재시도·취소·lock·우선순위
+  - name: workers
+    description: Worker 상태 조회·관리
+  - name: alerts
+    description: 운영 알림 조회·확인
+
+paths:
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: 워크플로우 대시보드 집계
+      description: 기본 10초 캐시. refresh=true는 캐시를 무시한다.
+      x-permission: workflow.view
+      parameters:
+        - name: range
+          in: query
+          schema: { type: string, enum: [1h, 24h, 7d], default: 24h }
+        - name: media_type
+          in: query
+          schema: { $ref: '#/components/schemas/MediaType' }
+        - name: refresh
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: 대시보드 집계
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/DashboardData' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /contents:
+    get:
+      operationId: listContents
+      tags: [contents]
+      summary: 콘텐츠 처리 목록
+      description: 상태·유형·기간·키워드 필터 + 페이지네이션. 기본 정렬 -updated_at.
+      x-permission: workflow.view
+      parameters:
+        - name: status
+          in: query
+          description: 콤마 구분 다중 상태 (예 status=FAILED,PROCESSING)
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/ContentStatus' }
+        - name: media_type
+          in: query
+          schema: { $ref: '#/components/schemas/MediaType' }
+        - name: failed_only
+          in: query
+          schema: { type: boolean }
+        - name: uploaded_by
+          in: query
+          schema: { type: integer }
+        - name: current_job_type
+          in: query
+          schema: { $ref: '#/components/schemas/JobType' }
+        - name: worker_type
+          in: query
+          schema: { $ref: '#/components/schemas/WorkerType' }
+        - name: keyword
+          in: query
+          description: 제목/파일명/uuid 부분 일치
+          schema: { type: string }
+        - $ref: '#/components/parameters/DateFromParam'
+        - $ref: '#/components/parameters/DateToParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: 콘텐츠 목록 + 페이지네이션 meta (기본 정렬 -updated_at)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/WorkflowContentListItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /contents/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      operationId: getContent
+      tags: [contents]
+      summary: 콘텐츠 처리 상세
+      description: >
+        Master 경로는 path_masked로만 제공한다 — 전체 경로·직접 URL은
+        어떤 응답에도 포함하지 않는다.
+      x-permission: workflow.view
+      responses:
+        '200':
+          description: 콘텐츠 상세 (파이프라인·rendition·이력 포함)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WorkflowContentDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /contents/{id}/reprocess:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: reprocessContent
+      tags: [contents]
+      summary: 콘텐츠 재처리 (새 workflow_instance 생성)
+      description: >
+        READY 또는 FAILED에서만 가능. 기존 인스턴스는 되살리지 않고
+        항상 새 workflow_instance를 생성한다. reason 필수 + 감사 로그.
+      x-permission: workflow.reprocess
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReprocessContentRequest' }
+      responses:
+        '201':
+          description: 새 인스턴스 생성됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommandResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /contents/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: cancelContent
+      tags: [contents]
+      summary: 처리 중 콘텐츠 취소
+      description: >
+        contents = PROCESSING에서만 가능 — 아니면 CONTENT_NOT_PROCESSING(409).
+        비종결 job 일괄 CANCELED, RUNNING job은 cancel_requested 마킹. reason 필수.
+      x-permission: workflow.cancel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelContentRequest' }
+      responses:
+        '200':
+          description: 취소 완료 (취소된 job 수·cancel_requested job 수)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommandResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: Job 목록
+      description: >
+        화면별 재사용 — 큐 status=READY,RETRY&sort=-priority,created_at ·
+        RUNNING status=RUNNING&sort=started_at · 실패 status=FAILED,TIMEOUT&sort=-finished_at.
+      x-permission: workflow.view
+      parameters:
+        - name: status
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/JobStatus' }
+        - name: job_type
+          in: query
+          schema: { $ref: '#/components/schemas/JobType' }
+        - name: content_id
+          in: query
+          schema: { type: integer }
+        - name: worker_id
+          in: query
+          schema: { type: integer }
+        - name: worker_type
+          in: query
+          schema: { $ref: '#/components/schemas/WorkerType' }
+        - name: priority_min
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 1000 }
+        - name: priority_max
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 1000 }
+        - name: retry_count_min
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: is_required
+          in: query
+          schema: { type: boolean }
+        - name: failed_only
+          in: query
+          schema: { type: boolean }
+        - name: timeout_imminent
+          in: query
+          description: 경과 > timeout_sec × 0.8
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/DateFromParam'
+        - $ref: '#/components/parameters/DateToParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - $ref: '#/components/parameters/SortParam'
+      responses:
+        '200':
+          description: Job 목록 + 페이지네이션 meta
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/WorkflowJobListItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # 라우트 선언 순서 주의 — Laravel에서 jobs/retry-batch는 jobs/{job}보다 먼저 선언한다
+  /jobs/retry-batch:
+    post:
+      operationId: retryJobsBatch
+      tags: [jobs]
+      summary: 실패 Job 일괄 재시도
+      description: 부분 성공 허용 — 건별 결과 배열(BatchCommandResult)을 반환한다.
+      x-permission: workflow.retry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetryJobBatchRequest' }
+      responses:
+        '200':
+          description: 건별 처리 결과
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BatchCommandResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /jobs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    get:
+      operationId: getJob
+      tags: [jobs]
+      summary: Job 상세 (이력·attempt 로그·lock)
+      description: >
+        histories(상태 전이)와 attempts.logs(실행 로그)를 구조적으로 분리한다.
+        stdout/stderr는 인라인하지 않고 별도 다운로드 URL로 제공한다.
+      x-permission: workflow.logs.view
+      responses:
+        '200':
+          description: Job 상세
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WorkflowJobDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /jobs/{id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: retryJob
+      tags: [jobs]
+      summary: 실패 Job 재시도
+      description: >
+        FAILED → RETRY 전이. retry_count 초기화(기본), 기존 이력·로그는 보존된다.
+      x-permission: workflow.retry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetryJobRequest' }
+      responses:
+        '200':
+          description: 재시도 예약됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommandResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 상태 기계 충돌
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                terminalState:
+                  summary: 종결 상태 재시도
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_STATE_TRANSITION
+                      message: "SUCCESS 상태는 재시도할 수 없습니다."
+                      current_state: SUCCESS
+                      allowed_actions: [view_logs]
+                alreadyRunning:
+                  summary: 실행 중 재시도
+                  value:
+                    success: false
+                    error:
+                      code: JOB_ALREADY_RUNNING
+                      message: "이미 실행 중입니다."
+                      current_state: RUNNING
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /jobs/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: cancelJob
+      tags: [jobs]
+      summary: Job 취소
+      description: >
+        WAITING/READY는 즉시 CANCELED(200). RUNNING은 cancel_requested 마킹 후 202.
+        종결 상태 취소는 INVALID_STATE_TRANSITION(409). reason 필수.
+      x-permission: workflow.cancel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelJobRequest' }
+      responses:
+        '200':
+          description: 즉시 취소됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommandResult' }
+        '202':
+          description: RUNNING — cancel_requested 마킹, Worker 확인 대기
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommandResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /jobs/{id}/release-lock:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: releaseJobLock
+      tags: [jobs]
+      summary: RUNNING Job의 lease 강제 회수 (HIGH)
+      description: >
+        lock DELETE 후 job을 target_status(RETRY 기본)로 전환한다.
+        fencing으로 늦은 결과는 폐기된다. reason 필수 + 감사 로그.
+      x-permission: workflow.release_lock
+      x-risk: HIGH
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseJobLockRequest' }
+      responses:
+        '200':
+          description: lock 회수됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommandResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 상태 기계 충돌
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                lockNotFound:
+                  summary: lock 없음
+                  value:
+                    success: false
+                    error:
+                      code: JOB_LOCK_NOT_FOUND
+                      message: "lock이 존재하지 않습니다. 이미 회수되었거나 완료되었습니다."
+                      current_state: SUCCESS
+                      allowed_actions: [view_logs]
+                notRunning:
+                  summary: RUNNING 아님
+                  value:
+                    success: false
+                    error:
+                      code: JOB_NOT_RUNNING
+                      message: "RUNNING 상태가 아닙니다."
+                      current_state: RETRY
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /jobs/{id}/priority:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    patch:
+      operationId: updateJobPriority
+      tags: [jobs]
+      summary: Job 우선순위 변경
+      description: WAITING/READY/RETRY에서만 가능 — RUNNING/종결은 INVALID_STATE_TRANSITION(409).
+      x-permission: workflow.retry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateJobPriorityRequest' }
+      responses:
+        '200':
+          description: 우선순위 변경됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommandResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /workers:
+    get:
+      operationId: listWorkers
+      tags: [workers]
+      summary: Worker 목록
+      description: 상태·유형·heartbeat 지연·GPU 필터. current_job과 available_actions 포함.
+      x-permission: workflow.view
+      parameters:
+        - name: status
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/WorkerStatus' }
+        - name: worker_type
+          in: query
+          schema: { $ref: '#/components/schemas/WorkerType' }
+        - name: supported_job_type
+          in: query
+          schema: { $ref: '#/components/schemas/JobType' }
+        - name: heartbeat_delay_min
+          in: query
+          description: heartbeat 지연 하한(초)
+          schema: { type: integer, minimum: 0 }
+        - name: gpu_available
+          in: query
+          schema: { type: boolean }
+        - name: keyword
+          in: query
+          description: name/hostname 부분 일치
+          schema: { type: string }
+      responses:
+        '200':
+          description: Worker 목록
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/WorkflowWorkerItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /workers/{id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: disableWorker
+      tags: [workers]
+      summary: Worker 비활성화 (HIGH)
+      description: >
+        ONLINE/BUSY에서 가능. drain=true(기본)는 신규 Claim만 중단하고 진행 중
+        job은 완료까지 대기한다. drain=false는 진행 중 job cancel + lock 회수 — UI 이중 확인.
+      x-permission: workflow.worker.manage
+      x-risk: HIGH
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DisableWorkerRequest' }
+      responses:
+        '200':
+          description: 비활성화됨 (drain 시 draining job 목록 포함)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WorkflowWorkerItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /workers/{id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: enableWorker
+      tags: [workers]
+      summary: DISABLED Worker 재활성화
+      description: heartbeat 수신 중이어야 ONLINE 전환 — 90초 이상 미수신이면 409.
+      x-permission: workflow.worker.manage
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnableWorkerRequest' }
+      responses:
+        '200':
+          description: 재활성화됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WorkflowWorkerItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: 상태 기계 충돌
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                notDisabled:
+                  summary: DISABLED 아님
+                  value:
+                    success: false
+                    error:
+                      code: WORKER_NOT_DISABLED
+                      message: "DISABLED 상태가 아닙니다."
+                      current_state: ONLINE
+                noHeartbeat:
+                  summary: heartbeat 미수신
+                  value:
+                    success: false
+                    error:
+                      code: WORKER_HEARTBEAT_MISSING
+                      message: "heartbeat 미수신 — Worker 프로세스 기동을 확인하세요."
+
+  /workers/{id}/clear-error:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: clearWorkerError
+      tags: [workers]
+      summary: Worker ERROR 해제 (HIGH)
+      description: >
+        ERROR에서만 가능 — ERROR → ONLINE. 자동 복귀 없음, 운영자 확인 전제.
+        reason 필수 + 감사 로그.
+      x-permission: workflow.worker.manage
+      x-risk: HIGH
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClearWorkerErrorRequest' }
+      responses:
+        '200':
+          description: ERROR 해제됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WorkflowWorkerItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: 운영 알림 목록
+      description: severity·acknowledged·event_type·기간 필터.
+      x-permission: workflow.view
+      parameters:
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/AlertSeverity' }
+        - name: acknowledged
+          in: query
+          schema: { type: boolean }
+        - name: event_type
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/DateFromParam'
+        - $ref: '#/components/parameters/DateToParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: 알림 목록
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/WorkflowAlertItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /alerts/{id}/ack:
+    parameters:
+      - $ref: '#/components/parameters/IdPathParam'
+    post:
+      operationId: acknowledgeAlert
+      tags: [alerts]
+      summary: 알림 확인 (멱등)
+      description: >
+        이미 확인된 알림 ack는 409가 아닌 200 + 기존 acknowledged_at을 반환한다(멱등).
+      x-permission: workflow.view
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AckAlertRequest' }
+      responses:
+        '200':
+          description: 확인 처리됨 (재호출 시 기존 acknowledged_at 반환)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WorkflowAlertItem' }
+              examples:
+                firstAck:
+                  summary: 최초 확인
+                  value:
+                    success: true
+                    data:
+                      alert_id: 501
+                      acknowledged_at: '2026-07-04T11:00:00Z'
+                repeatedAck:
+                  summary: 재호출 — 멱등, 동일 acknowledged_at
+                  value:
+                    success: true
+                    data:
+                      alert_id: 501
+                      acknowledged_at: '2026-07-04T11:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: sanctum
+      description: Sanctum 토큰
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: frame_admin_session
+      description: 관리자 웹 세션 (SPA 동일 출처)
+
+  parameters:
+    IdPathParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+    PageParam:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPageParam:
+      name: per_page
+      in: query
+      description: 최대 200 — 초과 시 200으로 절삭
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    SortParam:
+      name: sort
+      in: query
+      description: 콤마 구분 + '-' 내림차순 (예 sort=-priority,created_at) — path별 화이트리스트 외 필드는 무시
+      schema: { type: string }
+    DateFromParam:
+      name: date_from
+      in: query
+      description: ISO 8601 — 반개구간 [from, to)
+      schema: { type: string, format: date-time }
+    DateToParam:
+      name: date_to
+      in: query
+      description: ISO 8601 — 반개구간 [from, to)
+      schema: { type: string, format: date-time }
+
+  responses:
+    Unauthorized:
+      description: 미인증
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            success: false
+            error: { code: UNAUTHORIZED, message: "인증이 필요합니다." }
+    Forbidden:
+      description: 권한 없음
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            success: false
+            error: { code: PERMISSION_DENIED, message: "권한이 없습니다." }
+    NotFound:
+      description: 대상 없음
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            success: false
+            error: { code: NOT_FOUND, message: "대상을 찾을 수 없습니다." }
+    StateConflict:
+      description: 상태 기계 충돌
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            success: false
+            error:
+              code: INVALID_STATE_TRANSITION
+              message: "현재 상태에서 허용되지 않는 조작입니다."
+              current_state: SUCCESS
+              allowed_actions: [view_logs]
+    ValidationError:
+      description: 입력 검증 실패
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            success: false
+            error:
+              code: VALIDATION_ERROR
+              message: "입력 검증에 실패했습니다."
+              details: { reason: ["사유 입력이 필요합니다."] }
+
+  schemas:
+    # ── 공통 envelope ─────────────────────────────
+    SuccessResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: {}
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+            current_state: { type: string }
+            allowed_actions:
+              type: array
+              items: { type: string }
+
+    PaginationMeta:
+      type: object
+      properties:
+        page: { type: integer, minimum: 1 }
+        per_page: { type: integer, maximum: 200 }
+        total: { type: integer }
+        last_page: { type: integer }
+
+    # ── Enum ─────────────────────────────────────
+    ContentStatus:
+      type: string
+      enum: [UPLOADING, REGISTERED, PROCESSING, READY, FAILED, ARCHIVED, DELETED]
+    WorkflowInstanceStatus:
+      type: string
+      enum: [RUNNING, SUCCESS, FAILED, CANCELED]
+    JobStatus:
+      type: string
+      enum: [WAITING, READY, RUNNING, SUCCESS, FAILED, RETRY, SKIPPED, CANCELED, TIMEOUT]
+    WorkerStatus:
+      type: string
+      enum: [ONLINE, OFFLINE, BUSY, DISABLED, ERROR]
+    SearchIndexStatus:
+      type: string
+      enum: [PENDING, INDEXED, STALE, FAILED]
+    MediaType:
+      # 콘텐츠 MediaType에는 COMMON을 넣지 않는다 — COMMON은 transcode_profiles 전용
+      type: string
+      enum: [VIDEO, IMAGE, AUDIO, DOC]
+    JobType:
+      type: string
+      enum: [TM, VERIFY, MA, TC, IMAGE_TC, AUDIO_TC, CA, DOC_PREVIEW,
+             OCR, TEXT_EXTRACT, INDEX, PUBLISH, CLEANUP, WAVEFORM, STT, AI_ANALYSIS]
+    RenditionType:
+      type: string
+      enum: [MASTER, PROXY_VIDEO, PROXY_IMAGE, PROXY_AUDIO, THUMBNAIL,
+             CATALOG, PAGE_PREVIEW, DOCUMENT_PREVIEW, WAVEFORM, OCR_TEXT, EXTRACTED_TEXT]
+    StorageZone:
+      type: string
+      enum: [TEMP, MASTER, PROXY, THUMBNAIL, CATALOG, DOCUMENT, ARCHIVE]
+    AlertSeverity:
+      type: string
+      enum: [HIGH, MED, LOW]
+    FailureImpact:
+      type: string
+      enum: [REQUIRED_BLOCKING, OPTIONAL_WARNING]
+    WorkerType:
+      type: string
+      enum: [TM, GENERAL, TRANSCODE, IMAGE, AUDIO, DOCUMENT, OCR, INDEX]
+    ErrorCode:
+      type: string
+      enum: [UNAUTHORIZED, PERMISSION_DENIED, NOT_FOUND, VALIDATION_ERROR,
+             INVALID_STATE_TRANSITION, JOB_ALREADY_RUNNING, JOB_LOCK_NOT_FOUND,
+             JOB_NOT_RUNNING, JOB_NOT_FAILED, WORKER_OFFLINE, WORKER_DISABLED,
+             WORKER_NOT_DISABLED, WORKER_HEARTBEAT_MISSING, CONTENT_NOT_PROCESSING,
+             CONTENT_DELETED, REQUIRED_RENDITION_MISSING, INTERNAL_ERROR]
+
+    # ── available_actions ────────────────────────
+    ContentAction:
+      type: string
+      enum: [view_detail, reprocess, cancel, view_logs, publish_retry]
+    JobAction:
+      type: string
+      enum: [view_logs, retry, cancel, release_lock, update_priority, view_content]
+    WorkerAction:
+      type: string
+      enum: [disable, enable, clear_error, view_current_job, view_logs]
+
+    # ── Summary ──────────────────────────────────
+    UserSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+    ContentSummary:
+      type: object
+      properties:
+        content_id: { type: integer }
+        title: { type: string }
+        status: { $ref: '#/components/schemas/ContentStatus' }
+    WorkerSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/WorkerType' }
+        status: { $ref: '#/components/schemas/WorkerStatus' }
+    JobSummary:
+      type: object
+      properties:
+        job_id: { type: integer }
+        job_type: { $ref: '#/components/schemas/JobType' }
+        status: { $ref: '#/components/schemas/JobStatus' }
+    ProgressSummary:
+      type: object
+      properties:
+        percent: { type: number }
+        message: { type: string }
+        estimated_remaining_sec: { type: [integer, 'null'] }
+        updated_at: { type: string, format: date-time }
+    LockSummary:
+      type: object
+      properties:
+        locked_by_worker_id: { type: integer }
+        locked_at: { type: string, format: date-time }
+        locked_until: { type: string, format: date-time }
+        heartbeat_at: { type: string, format: date-time }
+
+    # ── Request Body ─────────────────────────────
+    ReprocessContentRequest:
+      type: object
+      required: [mode, reason]
+      properties:
+        mode: { type: string, enum: [failed_from, full] }
+        reason: { type: string, maxLength: 1000 }
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+        keep_existing_renditions: { type: boolean, default: true }
+        requested_job_type: { $ref: '#/components/schemas/JobType' }
+
+    CancelContentRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, maxLength: 1000 }
+
+    RetryJobRequest:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 1000 }
+        reset_retry_count: { type: boolean, default: true }
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+
+    RetryJobBatchRequest:
+      type: object
+      required: [job_ids, reason]
+      properties:
+        job_ids:
+          type: array
+          items: { type: integer }
+          minItems: 1
+          maxItems: 100
+        reason: { type: string, maxLength: 1000 }
+
+    CancelJobRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, maxLength: 1000 }
+
+    ReleaseJobLockRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, maxLength: 1000 }
+        target_status: { type: string, enum: [RETRY, FAILED], default: RETRY }
+
+    UpdateJobPriorityRequest:
+      type: object
+      required: [priority]
+      properties:
+        priority: { type: integer, minimum: 0, maximum: 1000 }
+        reason: { type: string, maxLength: 1000 }
+
+    DisableWorkerRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, maxLength: 1000 }
+        drain: { type: boolean, default: true }
+
+    EnableWorkerRequest:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 1000 }
+
+    ClearWorkerErrorRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, maxLength: 1000 }
+
+    AckAlertRequest:
+      type: object
+      properties:
+        note: { type: string, maxLength: 1000 }
+
+    # ── Response Data ────────────────────────────
+    DashboardData:
+      type: object
+      properties:
+        contents:
+          type: object
+          additionalProperties: { type: integer }
+        jobs:
+          type: object
+          additionalProperties: { type: integer }
+        workers:
+          type: object
+          additionalProperties: { type: integer }
+        queue:
+          type: object
+          properties:
+            tc_queue_length: { type: integer }
+            max_wait_sec: { type: integer }
+        metrics:
+          type: object
+          properties:
+            avg_processing_sec: { type: integer }
+            p95_processing_sec: { type: integer }
+            failure_rate: { type: number }
+            retry_rate: { type: number }
+            throughput_1h: { type: integer }
+        throughput_24h:
+          type: array
+          items:
+            type: object
+            properties:
+              hour: { type: string, format: date-time }
+              success: { type: integer }
+              failed: { type: integer }
+        banners:
+          type: array
+          items:
+            type: object
+            properties:
+              severity: { $ref: '#/components/schemas/AlertSeverity' }
+              event_type: { type: string }
+              message: { type: string }
+              action_link: { type: string }
+
+    CurrentStage:
+      type: object
+      properties:
+        job_type: { $ref: '#/components/schemas/JobType' }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        progress_percent: { type: number }
+
+    RequiredProgress:
+      type: object
+      properties:
+        done_required: { type: integer }
+        total_required: { type: integer }
+
+    WorkflowContentListItem:
+      type: object
+      properties:
+        content_id: { type: integer }
+        uuid: { type: string, format: uuid }
+        title: { type: string }
+        media_type: { $ref: '#/components/schemas/MediaType' }
+        content_status: { $ref: '#/components/schemas/ContentStatus' }
+        current_stage: { $ref: '#/components/schemas/CurrentStage' }
+        progress: { $ref: '#/components/schemas/RequiredProgress' }
+        has_failed_job: { type: boolean }
+        has_proxy: { type: boolean }
+        has_thumbnail: { type: boolean }
+        index_status: { $ref: '#/components/schemas/SearchIndexStatus' }
+        publish_status: { $ref: '#/components/schemas/JobStatus' }
+        uploaded_by: { $ref: '#/components/schemas/UserSummary' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        available_actions:
+          type: array
+          items: { $ref: '#/components/schemas/ContentAction' }
+
+    MasterRenditionMasked:
+      type: object
+      description: Master는 마스킹된 경로만 노출 — 전체 경로·직접 URL 금지
+      properties:
+        exists: { type: boolean }
+        storage_zone: { $ref: '#/components/schemas/StorageZone' }
+        path_masked: { type: string }
+        file_size: { type: [integer, 'null'] }
+
+    RenditionItem:
+      type: object
+      properties:
+        rendition_type: { $ref: '#/components/schemas/RenditionType' }
+        variant_key: { type: string }
+        width: { type: [integer, 'null'] }
+        height: { type: [integer, 'null'] }
+        duration_ms: { type: [integer, 'null'] }
+        page_no: { type: [integer, 'null'] }
+        timecode_ms: { type: [integer, 'null'] }
+        preview_url: { type: [string, 'null'] }
+
+    WorkflowContentDetail:
+      type: object
+      properties:
+        content:
+          type: object
+          properties:
+            content_id: { type: integer }
+            uuid: { type: string, format: uuid }
+            title: { type: string }
+            media_type: { $ref: '#/components/schemas/MediaType' }
+            status: { $ref: '#/components/schemas/ContentStatus' }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+        media_files:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              original_filename: { type: string }
+              file_size: { type: integer }
+              checksum: { type: string }
+              detected_mime: { type: [string, 'null'] }
+        renditions:
+          type: object
+          properties:
+            master: { $ref: '#/components/schemas/MasterRenditionMasked' }
+            proxy:
+              type: array
+              items: { $ref: '#/components/schemas/RenditionItem' }
+            thumbnail:
+              type: array
+              items: { $ref: '#/components/schemas/RenditionItem' }
+            catalog:
+              type: array
+              items: { $ref: '#/components/schemas/RenditionItem' }
+            document_preview:
+              type: array
+              items: { $ref: '#/components/schemas/RenditionItem' }
+        search_index:
+          type: object
+          properties:
+            status: { $ref: '#/components/schemas/SearchIndexStatus' }
+            index_version: { type: integer }
+            indexed_at: { type: [string, 'null'], format: date-time }
+        workflow_instance:
+          type: object
+          properties:
+            id: { type: integer }
+            template_code: { type: string }
+            template_version: { type: integer }
+            status: { $ref: '#/components/schemas/WorkflowInstanceStatus' }
+            started_at: { type: string, format: date-time }
+        job_pipeline:
+          type: array
+          items:
+            type: object
+            properties:
+              job_id: { type: integer }
+              job_type: { $ref: '#/components/schemas/JobType' }
+              status: { $ref: '#/components/schemas/JobStatus' }
+              started_at: { type: [string, 'null'], format: date-time }
+              finished_at: { type: [string, 'null'], format: date-time }
+              elapsed_sec: { type: [integer, 'null'] }
+              worker_name: { type: [string, 'null'] }
+              retry_count: { type: integer }
+              progress_percent: { type: [number, 'null'] }
+              fail_reason_code: { type: [string, 'null'] }
+        recent_histories:
+          type: array
+          items: { $ref: '#/components/schemas/JobHistoryItem' }
+        recent_logs:
+          type: array
+          items:
+            type: object
+            properties:
+              job_id: { type: integer }
+              level: { type: string }
+              message: { type: string }
+              at: { type: string, format: date-time }
+        available_actions:
+          type: array
+          items: { $ref: '#/components/schemas/ContentAction' }
+
+    WorkflowJobListItem:
+      type: object
+      properties:
+        job_id: { type: integer }
+        content_id: { type: integer }
+        content_title: { type: string }
+        job_type: { $ref: '#/components/schemas/JobType' }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        is_required: { type: boolean }
+        priority: { type: integer }
+        retry_count: { type: integer }
+        max_retry: { type: integer }
+        next_attempt_at: { type: [string, 'null'], format: date-time }
+        worker:
+          oneOf:
+            - $ref: '#/components/schemas/WorkerSummary'
+            - type: 'null'
+        progress:
+          oneOf:
+            - $ref: '#/components/schemas/ProgressSummary'
+            - type: 'null'
+        started_at: { type: [string, 'null'], format: date-time }
+        finished_at: { type: [string, 'null'], format: date-time }
+        elapsed_sec: { type: [integer, 'null'] }
+        timeout_sec: { type: integer }
+        timeout_imminent: { type: boolean }
+        locked_until: { type: [string, 'null'], format: date-time }
+        heartbeat_at: { type: [string, 'null'], format: date-time }
+        fail_reason_code: { type: [string, 'null'] }
+        fail_message: { type: [string, 'null'] }
+        available_actions:
+          type: array
+          items: { $ref: '#/components/schemas/JobAction' }
+
+    JobHistoryItem:
+      type: object
+      properties:
+        from: { type: [string, 'null'] }
+        to: { type: string }
+        actor: { type: string }
+        note: { type: [string, 'null'] }
+        at: { type: string, format: date-time }
+
+    JobLogItem:
+      type: object
+      description: stdout/stderr는 인라인하지 않고 다운로드 URL로 제공
+      properties:
+        level: { type: string }
+        command: { type: [string, 'null'] }
+        message: { type: [string, 'null'] }
+        stdout_url: { type: [string, 'null'] }
+        stderr_url: { type: [string, 'null'] }
+        detail: { type: [object, 'null'], additionalProperties: true }
+        at: { type: string, format: date-time }
+
+    JobAttempt:
+      type: object
+      properties:
+        attempt_no: { type: integer }
+        logs:
+          type: array
+          items: { $ref: '#/components/schemas/JobLogItem' }
+
+    WorkflowJobDetail:
+      type: object
+      properties:
+        job:
+          type: object
+          properties:
+            job_id: { type: integer }
+            job_type: { $ref: '#/components/schemas/JobType' }
+            status: { $ref: '#/components/schemas/JobStatus' }
+            is_required: { type: boolean }
+            retry_count: { type: integer }
+            max_retry: { type: integer }
+            priority: { type: integer }
+            timeout_sec: { type: integer }
+        content: { $ref: '#/components/schemas/ContentSummary' }
+        instance:
+          type: object
+          properties:
+            id: { type: integer }
+            template_code: { type: string }
+            version: { type: integer }
+        worker:
+          oneOf:
+            - $ref: '#/components/schemas/WorkerSummary'
+            - type: 'null'
+        payload: { type: [object, 'null'], additionalProperties: true }
+        result: { type: [object, 'null'], additionalProperties: true }
+        histories:
+          type: array
+          items: { $ref: '#/components/schemas/JobHistoryItem' }
+        attempts:
+          type: array
+          items: { $ref: '#/components/schemas/JobAttempt' }
+        progress:
+          oneOf:
+            - $ref: '#/components/schemas/ProgressSummary'
+            - type: 'null'
+        lock:
+          oneOf:
+            - $ref: '#/components/schemas/LockSummary'
+            - type: 'null'
+        generated_renditions:
+          type: array
+          items: { $ref: '#/components/schemas/RenditionItem' }
+        available_actions:
+          type: array
+          items: { $ref: '#/components/schemas/JobAction' }
+
+    WorkflowWorkerItem:
+      type: object
+      properties:
+        worker_id: { type: integer }
+        worker_name: { type: string }
+        worker_type: { $ref: '#/components/schemas/WorkerType' }
+        status: { $ref: '#/components/schemas/WorkerStatus' }
+        supported_job_types:
+          type: array
+          items: { $ref: '#/components/schemas/JobType' }
+        hostname: { type: string }
+        ip_address: { type: string }
+        last_heartbeat_at: { type: [string, 'null'], format: date-time }
+        heartbeat_delay_sec: { type: [integer, 'null'] }
+        current_job:
+          type: [object, 'null']
+          properties:
+            job_id: { type: integer }
+            job_type: { $ref: '#/components/schemas/JobType' }
+            content_id: { type: integer }
+        max_concurrency: { type: integer }
+        running_count: { type: integer }
+        gpu_available: { type: boolean }
+        cpu_count: { type: [integer, 'null'] }
+        memory_limit_mb: { type: [integer, 'null'] }
+        version: { type: [string, 'null'] }
+        available_actions:
+          type: array
+          items: { $ref: '#/components/schemas/WorkerAction' }
+
+    WorkflowAlertItem:
+      type: object
+      properties:
+        alert_id: { type: integer }
+        severity: { $ref: '#/components/schemas/AlertSeverity' }
+        event_type: { type: string }
+        message: { type: string }
+        related_content_id: { type: [integer, 'null'] }
+        related_job_id: { type: [integer, 'null'] }
+        related_worker_id: { type: [integer, 'null'] }
+        created_at: { type: string, format: date-time }
+        acknowledged_at: { type: [string, 'null'], format: date-time }
+        acknowledged_by: { type: [integer, 'null'] }
+        action_link: { type: string }
+
+    CommandResult:
+      type: object
+      description: 조작별 결과 필드 + 서버 계산 available_actions
+      additionalProperties: true
+      properties:
+        available_actions:
+          type: array
+          items: { type: string }
+
+    BatchCommandResult:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              job_id: { type: integer }
+              success: { type: boolean }
+              error_code: { type: [string, 'null'] }
+        succeeded: { type: integer }
+        failed: { type: integer }
