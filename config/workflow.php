@@ -22,6 +22,8 @@ return [
     'tools' => [
         'ffmpeg' => env('WORKFLOW_TOOL_FFMPEG', 'ffmpeg'),
         'ffprobe' => env('WORKFLOW_TOOL_FFPROBE', 'ffprobe'),
+        // IMAGE 파이프라인 — Transcode Profile Spec §12 (libvips)
+        'vipsthumbnail' => env('WORKFLOW_TOOL_VIPSTHUMBNAIL', 'vipsthumbnail'),
     ],
 
     // 검색 색인 driver — dev(cache mock)|elasticsearch|opensearch (ADR-0005).

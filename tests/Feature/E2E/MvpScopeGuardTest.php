@@ -7,26 +7,31 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * MVP 제외 기능 미구현 확인 — MVP Scope Git Strategy §2.
- * DB enum/seed에 확장값이 존재하는 것은 허용되지만, MVP 코드 경로(Handler)는 없어야 한다.
+ * 구현 범위 가드 — MVP Scope Git Strategy §2 · WBS §M6.
+ * MVP 8종 + M6 확장(IMAGE_TC·AUDIO_TC)은 등록돼야 하고, 작업 정의가 미확정인
+ * 유형(OCR·STT·AI_ANALYSIS·WAVEFORM·HLS)은 Handler가 없어야 한다.
+ * DB enum/seed에 확장값이 존재하는 것은 허용된다.
  */
 class MvpScopeGuardTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const array MVP_HANDLER_TYPES = ['TM', 'VERIFY', 'MA', 'TC', 'CA', 'INDEX', 'PUBLISH', 'CLEANUP'];
+    private const array IMPLEMENTED_HANDLER_TYPES = [
+        'TM', 'VERIFY', 'MA', 'TC', 'CA', 'INDEX', 'PUBLISH', 'CLEANUP',
+        'IMAGE_TC', 'AUDIO_TC',
+    ];
 
     private const array EXCLUDED_TYPES = [
         'OCR', 'STT', 'AI_ANALYSIS', 'WAVEFORM',
-        'IMAGE_TC', 'AUDIO_TC', 'DOC_PREVIEW', 'TEXT_EXTRACT',
+        'DOC_PREVIEW', 'TEXT_EXTRACT',
     ];
 
-    public function test_mvp_handlers_are_registered(): void
+    public function test_implemented_handlers_are_registered(): void
     {
         $registry = app(HandlerRegistry::class);
 
-        foreach (self::MVP_HANDLER_TYPES as $type) {
-            $this->assertNotNull($registry->resolve($type), "MVP handler {$type} 누락");
+        foreach (self::IMPLEMENTED_HANDLER_TYPES as $type) {
+            $this->assertNotNull($registry->resolve($type), "handler {$type} 누락");
         }
     }
 
@@ -35,7 +40,7 @@ class MvpScopeGuardTest extends TestCase
         $registry = app(HandlerRegistry::class);
 
         foreach (self::EXCLUDED_TYPES as $type) {
-            $this->assertNull($registry->resolve($type), "MVP 제외 유형 {$type}의 Handler가 구현되어 있다");
+            $this->assertNull($registry->resolve($type), "미확정/보류 유형 {$type}의 Handler가 구현되어 있다");
         }
     }
 
@@ -44,11 +49,11 @@ class MvpScopeGuardTest extends TestCase
         $handlerDir = app_path('Services/Workflow/Worker/Handlers');
         $files = array_map('basename', glob($handlerDir.'/*.php') ?: []);
 
-        $forbidden = ['Ocr', 'Stt', 'AiAnalysis', 'Hls', 'Waveform', 'ImageTranscode', 'AudioTranscode', 'DocumentPreview', 'TextExtract'];
+        $forbidden = ['Ocr', 'Stt', 'AiAnalysis', 'Hls', 'Waveform', 'DocumentPreview', 'TextExtract'];
 
         foreach ($files as $file) {
             foreach ($forbidden as $prefix) {
-                $this->assertStringNotContainsString($prefix, $file, "MVP 제외 Handler 파일 존재: {$file}");
+                $this->assertStringNotContainsString($prefix, $file, "보류 Handler 파일 존재: {$file}");
             }
         }
     }

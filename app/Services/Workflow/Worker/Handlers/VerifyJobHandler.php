@@ -62,8 +62,9 @@ class VerifyJobHandler extends AbstractJobHandler
             return JobResult::failure(FailureType::Permanent, 'UNSUPPORTED_FORMAT', "mime not allowed: {$detectedMime}");
         }
 
-        // 헤더 파싱 손상 검사 — 영상/오디오는 ffprobe (이미지/문서 상세 검사는 M6)
-        if (str_starts_with($detectedMime, 'video/') || str_starts_with($detectedMime, 'audio/')) {
+        // 헤더 파싱 손상 검사 — 영상/오디오/이미지는 ffprobe (Spec §9 ④, 문서 검사는 DOC_PREVIEW의 pdfinfo)
+        if (str_starts_with($detectedMime, 'video/') || str_starts_with($detectedMime, 'audio/')
+            || str_starts_with($detectedMime, 'image/')) {
             $ctx->progress->report($job->id, 70.0, 'probing media header');
 
             if ($this->prober->probe($abs) === null) {

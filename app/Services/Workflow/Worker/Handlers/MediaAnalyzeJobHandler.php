@@ -59,6 +59,11 @@ class MediaAnalyzeJobHandler extends AbstractJobHandler
             return JobResult::failure(FailureType::Permanent, 'PERMANENT_CORRUPT', 'required video fields missing (codec/resolution/duration)');
         }
 
+        // IMAGE 필수 필드 assert — 크기 (Job Type Def §3.5: media_info 크기·색공간·EXIF)
+        if ($mediaType === 'IMAGE' && ($video['width'] === null || $video['height'] === null)) {
+            return JobResult::failure(FailureType::Permanent, 'PERMANENT_CORRUPT', 'required image fields missing (resolution)');
+        }
+
         $ctx->cancelToken->tick();
         $ctx->progress->report($job->id, 80.0, 'saving media info');
 

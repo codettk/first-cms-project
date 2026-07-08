@@ -103,6 +103,75 @@ class ProfileCompiler
         return [...$args, $outputPath];
     }
 
+    /**
+     * AUDIO 프록시 ffmpeg 인자 — AUDIO_PROXY_AAC_128K 기준 (Transcode Profile Spec §6·§11).
+     *
+     * @return list<string>
+     */
+    public function ffmpegAudioArgs(TranscodeProfile $profile, string $inputPath, string $outputPath): array
+    {
+        $params = $profile->params ?? [];
+
+        $args = ['-y', '-i', $inputPath, '-vn', '-c:a', (string) ($profile->codec ?? 'aac')];
+
+        if ($profile->audio_bitrate !== null) {
+            $args = [...$args, '-b:a', "{$profile->audio_bitrate}k"];
+        }
+
+        if (isset($params['sample_rate'])) {
+            $args = [...$args, '-ar', (string) $params['sample_rate']];
+        }
+
+        if (isset($params['channels'])) {
+            $args = [...$args, '-ac', (string) $params['channels']];
+        }
+
+        if (($params['faststart'] ?? false) === true) {
+            $args = [...$args, '-movflags', '+faststart'];
+        }
+
+        // 진행률 파싱용 (Queue Worker Spec §10)
+        return [...$args, '-progress', 'pipe:1', $outputPath];
+    }
+
+    /**
+     * IMAGE 프록시/썸네일 vipsthumbnail 인자 — Transcode Profile Spec §12.
+     * autorotate(EXIF 픽셀 적용)·strip(GPS 등 메타 제거)·sRGB 변환·축소만(업스케일 금지).
+     *
+     * @return list<string>
+     */
+    public function vipsThumbnailArgs(TranscodeProfile $profile, string $inputPath, string $outputPath): array
+    {
+        $params = $profile->params ?? [];
+
+        $outputSpec = [];
+        if ($profile->quality !== null) {
+            $outputSpec[] = "Q={$profile->quality}";
+        }
+        if (($params['strip'] ?? false) === true) {
+            $outputSpec[] = 'strip';
+        }
+
+        $width = $profile->width ?? 2048;
+        $height = $profile->height ?? $width;
+
+        $args = [
+            $inputPath,
+            '-o', $outputSpec === [] ? $outputPath : $outputPath.'['.implode(',', $outputSpec).']',
+            '--size', "{$width}x{$height}>", // '>' — 축소만 (Spec §12 업스케일 금지)
+        ];
+
+        if (($params['autorotate'] ?? false) === true) {
+            $args[] = '--rotate';
+        }
+
+        if (($params['srgb'] ?? false) === true) {
+            $args = [...$args, '--eprofile', 'srgb'];
+        }
+
+        return $args;
+    }
+
     private function videoEncoder(TranscodeProfile $profile): string
     {
         return match ($profile->codec) {

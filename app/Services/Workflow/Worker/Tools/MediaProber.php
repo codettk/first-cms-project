@@ -29,9 +29,20 @@ class MediaProber
         return is_array($decoded) && ($decoded['streams'] ?? []) !== [] ? $decoded : null;
     }
 
+    /** 정지 이미지 컨테이너 format 이름 — ffprobe상 이미지도 video 스트림으로 보인다 */
+    private const array IMAGE_FORMAT_NAMES = [
+        'image2', 'png_pipe', 'webp_pipe', 'jpeg_pipe', 'bmp_pipe', 'tiff_pipe', 'gif',
+    ];
+
     /** 스트림 구성으로 media_type 판정 — 판별 불가면 null (MA는 PERMANENT 처리) */
     public function detectMediaType(array $probe): ?string
     {
+        $formatNames = explode(',', (string) ($probe['format']['format_name'] ?? ''));
+
+        if (array_intersect($formatNames, self::IMAGE_FORMAT_NAMES) !== []) {
+            return 'IMAGE';
+        }
+
         $codecTypes = array_column($probe['streams'] ?? [], 'codec_type');
 
         if (in_array('video', $codecTypes, true)) {

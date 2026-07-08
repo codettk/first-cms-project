@@ -14,8 +14,9 @@ use App\Services\Workflow\Worker\JobResult;
 use App\Services\Workflow\Worker\Tools\ToolRunner;
 
 /**
- * CA — 대표 썸네일 1건 + 카탈로그 N건 (Worker Agent Spec §9).
+ * CA — 대표 썸네일 1건 + 카탈로그 N건 (Worker Agent Spec §9 · Job Type Def §3.7).
  * 입력은 Proxy(Master 접근 금지). 대표 실패는 실패, 카탈로그 부분 실패는 SUCCESS + WARN.
+ * 유형별 동작(§4 매트릭스): VIDEO 썸네일+카탈로그 / IMAGE 썸네일만 — 카탈로그 없음.
  */
 class CatalogJobHandler extends AbstractJobHandler
 {
@@ -29,6 +30,72 @@ class CatalogJobHandler extends AbstractJobHandler
     ) {}
 
     public function handle(WorkflowJob $job, JobExecutionContext $ctx): JobResult
+    {
+        return match ($ctx->content()->media_type?->value) {
+            'IMAGE' => $this->handleImage($job, $ctx),
+            default => $this->handleVideo($job, $ctx),
+        };
+    }
+
+    /** IMAGE — Proxy Image를 vipsthumbnail로 리사이즈한 대표 썸네일 1건만 생성 */
+    private function handleImage(WorkflowJob $job, JobExecutionContext $ctx): JobResult
+    {
+        $proxy = MediaRendition::query()
+            ->where('content_id', $job->content_id)
+            ->where('rendition_type', 'PROXY_IMAGE')
+            ->first();
+
+        if ($proxy === null) {
+            return JobResult::failure(FailureType::StorageError, 'STORAGE_IO', 'PROXY_IMAGE rendition missing — CA input is proxy only');
+        }
+
+        $inputAbs = $this->storage->absolutePath($proxy->storage_zone, $proxy->path);
+
+        if (! is_file($inputAbs)) {
+            return JobResult::failure(FailureType::StorageError, 'STORAGE_IO', 'proxy image file missing on storage');
+        }
+
+        $thumbProfile = $this->compiler->loadByCode('IMAGE_THUMBNAIL_WEBP_480');
+
+        $ctx->progress->report($job->id, 20.0, 'resizing thumbnail');
+
+        $thumbTmp = $this->storage->tempFilePath(StorageZone::Thumbnail, $job->id, "{$job->content_id}_thumb.webp");
+        $thumbResult = $this->runner->run(
+            [(string) config('workflow.tools.vipsthumbnail'), ...$this->compiler->vipsThumbnailArgs($thumbProfile, $inputAbs, $thumbTmp)],
+            timeoutSec: 120,
+        );
+
+        if (! $thumbResult->ok() || ! is_file($thumbTmp) || $this->storage->fileSize($thumbTmp) === 0) {
+            return JobResult::failure(FailureType::ExternalToolError, 'VIPS_FAILED', 'thumbnail resize failed: '.$thumbResult->stderrTail());
+        }
+
+        $thumbRelative = sprintf('thumb/%s/%s/%d.webp', now()->format('Y'), now()->format('m'), $job->content_id);
+        $thumbAbs = $this->storage->promote(StorageZone::Thumbnail, $thumbTmp, $thumbRelative);
+
+        $this->renditions->upsert([
+            'content_id' => $job->content_id,
+            'media_file_id' => $proxy->media_file_id,
+            'rendition_type' => 'THUMBNAIL',
+            'storage_zone' => StorageZone::Thumbnail->value,
+            'variant_key' => $thumbProfile->variant_key,
+            'path' => $thumbRelative,
+            'file_size' => $this->storage->fileSize($thumbAbs),
+            'checksum' => $this->storage->checksumSha256($thumbAbs),
+            'mime_type' => 'image/webp',
+            'profile_id' => $thumbProfile->id,
+        ]);
+
+        $ctx->progress->report($job->id, 100.0, 'thumbnail complete');
+
+        return JobResult::success([
+            'thumbnail' => $thumbRelative,
+            'catalog_created' => 0,
+            'catalog_failed' => 0,
+        ]);
+    }
+
+    /** VIDEO — 대표 썸네일(5초 프레임) + 카탈로그 N건 (기본 경로) */
+    private function handleVideo(WorkflowJob $job, JobExecutionContext $ctx): JobResult
     {
         $proxy = MediaRendition::query()
             ->where('content_id', $job->content_id)

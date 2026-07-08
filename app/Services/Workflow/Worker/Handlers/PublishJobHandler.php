@@ -24,9 +24,12 @@ class PublishJobHandler extends AbstractJobHandler
 {
     protected const string JOB_TYPE = 'PUBLISH';
 
-    /** 유형별 웹 표출 필수 rendition — State Machine Spec §8 ③ (MVP: VIDEO) */
+    /** 유형별 웹 표출 필수 rendition — State Machine Spec §8 ②③ */
     private const array REQUIRED_RENDITIONS = [
         'VIDEO' => ['MASTER', 'PROXY_VIDEO', 'THUMBNAIL'],
+        'IMAGE' => ['MASTER', 'PROXY_IMAGE', 'THUMBNAIL'],
+        'AUDIO' => ['MASTER', 'PROXY_AUDIO'],
+        'DOC' => ['MASTER', 'PAGE_PREVIEW'],
     ];
 
     public function __construct(

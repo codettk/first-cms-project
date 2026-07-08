@@ -111,9 +111,14 @@ class TmVerifyMaHandlerTest extends HandlerTestCase
 
     public function test_verify_passes_for_intact_allowed_file(): void
     {
-        // 최소 PNG — fileinfo가 image/png로 판정 (이미지는 ffprobe 생략 경로)
+        // 최소 PNG — fileinfo가 image/png로 판정, 이미지도 헤더 파싱 검사를 거친다 (Spec §9 ④)
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
         [$job, , $mediaFile] = $this->makeMasterFixture($png);
+
+        $this->tools->pushProbeJson([
+            'streams' => [['codec_type' => 'video', 'codec_name' => 'png', 'width' => 1, 'height' => 1]],
+            'format' => ['format_name' => 'png_pipe'],
+        ]);
 
         $result = app(VerifyJobHandler::class)->handle($job, $this->makeContext($job));
 

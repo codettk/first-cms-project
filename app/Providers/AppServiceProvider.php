@@ -7,8 +7,10 @@ use App\Services\Workflow\Search\ElasticsearchSearchIndexClient;
 use App\Services\Workflow\Search\OpenSearchSearchIndexClient;
 use App\Services\Workflow\Search\SearchIndexClient;
 use App\Services\Workflow\Worker\HandlerRegistry;
+use App\Services\Workflow\Worker\Handlers\AudioTranscodeJobHandler;
 use App\Services\Workflow\Worker\Handlers\CatalogJobHandler;
 use App\Services\Workflow\Worker\Handlers\CleanupJobHandler;
+use App\Services\Workflow\Worker\Handlers\ImageTranscodeJobHandler;
 use App\Services\Workflow\Worker\Handlers\IndexJobHandler;
 use App\Services\Workflow\Worker\Handlers\MediaAnalyzeJobHandler;
 use App\Services\Workflow\Worker\Handlers\PublishJobHandler;
@@ -22,14 +24,16 @@ use Illuminate\Support\ServiceProvider;
 class AppServiceProvider extends ServiceProvider
 {
     /**
-     * MVP Handler 8종 — OCR·STT·AI_ANALYSIS·HLS·WAVEFORM·IMAGE_TC·AUDIO_TC·
-     * DOC_PREVIEW·TEXT_EXTRACT는 M6 확장으로 등록하지 않는다 (MVP Scope Git Strategy §1).
+     * 파이프라인 Handler — MVP 8종 + M6 확장(IMAGE_TC·AUDIO_TC).
+     * OCR·STT·AI_ANALYSIS·HLS·WAVEFORM은 작업 정의 미확정으로 등록하지 않는다 (WBS §M6).
      */
     private const array MVP_HANDLERS = [
         TmJobHandler::class,
         VerifyJobHandler::class,
         MediaAnalyzeJobHandler::class,
         VideoTranscodeJobHandler::class,
+        ImageTranscodeJobHandler::class,
+        AudioTranscodeJobHandler::class,
         CatalogJobHandler::class,
         IndexJobHandler::class,
         PublishJobHandler::class,
