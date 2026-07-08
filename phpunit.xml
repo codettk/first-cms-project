@@ -30,6 +30,8 @@
         <env name="DB_USERNAME" value="postgres"/>
         <env name="DB_PASSWORD" value="postgres"/>
         <env name="DB_URL" value=""/>
+        <env name="WORKFLOW_SEARCH_DRIVER" value="dev"/>
+        <env name="WORKFLOW_SEARCH_INDEX" value="content_mam_test"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
