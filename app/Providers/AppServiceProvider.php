@@ -10,10 +10,12 @@ use App\Services\Workflow\Worker\HandlerRegistry;
 use App\Services\Workflow\Worker\Handlers\AudioTranscodeJobHandler;
 use App\Services\Workflow\Worker\Handlers\CatalogJobHandler;
 use App\Services\Workflow\Worker\Handlers\CleanupJobHandler;
+use App\Services\Workflow\Worker\Handlers\DocumentPreviewJobHandler;
 use App\Services\Workflow\Worker\Handlers\ImageTranscodeJobHandler;
 use App\Services\Workflow\Worker\Handlers\IndexJobHandler;
 use App\Services\Workflow\Worker\Handlers\MediaAnalyzeJobHandler;
 use App\Services\Workflow\Worker\Handlers\PublishJobHandler;
+use App\Services\Workflow\Worker\Handlers\TextExtractJobHandler;
 use App\Services\Workflow\Worker\Handlers\TmJobHandler;
 use App\Services\Workflow\Worker\Handlers\VerifyJobHandler;
 use App\Services\Workflow\Worker\Handlers\VideoTranscodeJobHandler;
@@ -24,7 +26,7 @@ use Illuminate\Support\ServiceProvider;
 class AppServiceProvider extends ServiceProvider
 {
     /**
-     * 파이프라인 Handler — MVP 8종 + M6 확장(IMAGE_TC·AUDIO_TC).
+     * 파이프라인 Handler — MVP 8종 + M6 확장(IMAGE_TC·AUDIO_TC·DOC_PREVIEW·TEXT_EXTRACT).
      * OCR·STT·AI_ANALYSIS·HLS·WAVEFORM은 작업 정의 미확정으로 등록하지 않는다 (WBS §M6).
      */
     private const array MVP_HANDLERS = [
@@ -34,6 +36,8 @@ class AppServiceProvider extends ServiceProvider
         VideoTranscodeJobHandler::class,
         ImageTranscodeJobHandler::class,
         AudioTranscodeJobHandler::class,
+        DocumentPreviewJobHandler::class,
+        TextExtractJobHandler::class,
         CatalogJobHandler::class,
         IndexJobHandler::class,
         PublishJobHandler::class,

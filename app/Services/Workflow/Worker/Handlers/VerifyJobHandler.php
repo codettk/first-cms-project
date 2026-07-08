@@ -9,6 +9,7 @@ use App\Services\Workflow\Storage\MediaStorageService;
 use App\Services\Workflow\Worker\JobExecutionContext;
 use App\Services\Workflow\Worker\JobResult;
 use App\Services\Workflow\Worker\Tools\MediaProber;
+use App\Services\Workflow\Worker\Tools\ToolRunner;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -19,15 +20,20 @@ class VerifyJobHandler extends AbstractJobHandler
 {
     protected const string JOB_TYPE = 'VERIFY';
 
-    /** MVP 허용 MIME prefix/목록 — VIDEO 파이프라인 중심, 여타 유형은 M6에서 확장 */
+    /** 허용 MIME prefix/목록 — Job Type Def §3.2 */
     private const array ALLOWED_MIME_PREFIXES = ['video/', 'audio/', 'image/'];
 
     // 판별 불가(octet-stream)는 허용하지 않는다 — 검증 우회 방지
-    private const array ALLOWED_MIME_EXACT = ['application/pdf'];
+    private const array ALLOWED_MIME_EXACT = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ];
 
     public function __construct(
         private readonly MediaStorageService $storage,
         private readonly MediaProber $prober,
+        private readonly ToolRunner $runner,
     ) {}
 
     public function handle(WorkflowJob $job, JobExecutionContext $ctx): JobResult
@@ -62,13 +68,26 @@ class VerifyJobHandler extends AbstractJobHandler
             return JobResult::failure(FailureType::Permanent, 'UNSUPPORTED_FORMAT', "mime not allowed: {$detectedMime}");
         }
 
-        // 헤더 파싱 손상 검사 — 영상/오디오/이미지는 ffprobe (Spec §9 ④, 문서 검사는 DOC_PREVIEW의 pdfinfo)
+        // 헤더 파싱 손상 검사 — 영상/오디오/이미지는 ffprobe, PDF는 pdfinfo (Spec §9 ④)
         if (str_starts_with($detectedMime, 'video/') || str_starts_with($detectedMime, 'audio/')
             || str_starts_with($detectedMime, 'image/')) {
             $ctx->progress->report($job->id, 70.0, 'probing media header');
 
             if ($this->prober->probe($abs) === null) {
                 return JobResult::failure(FailureType::Permanent, 'PERMANENT_CORRUPT', 'media header parse failed');
+            }
+        } elseif ($detectedMime === 'application/pdf') {
+            $ctx->progress->report($job->id, 70.0, 'probing document header');
+
+            $info = $this->runner->run([(string) config('workflow.tools.pdfinfo'), $abs], timeoutSec: 60);
+
+            if (! $info->ok()) {
+                return JobResult::failure(FailureType::Permanent, 'PERMANENT_CORRUPT', 'pdf header parse failed');
+            }
+
+            // 암호화 문서는 후속 변환이 불가능하다 — 조기 PERMANENT (Transcode Profile Spec §13)
+            if (preg_match('/^Encrypted:\s*yes/mi', $info->stdout)) {
+                return JobResult::failure(FailureType::Permanent, 'ENCRYPTED_DOC', 'encrypted document is not allowed');
             }
         }
 

@@ -18,12 +18,11 @@ class MvpScopeGuardTest extends TestCase
 
     private const array IMPLEMENTED_HANDLER_TYPES = [
         'TM', 'VERIFY', 'MA', 'TC', 'CA', 'INDEX', 'PUBLISH', 'CLEANUP',
-        'IMAGE_TC', 'AUDIO_TC',
+        'IMAGE_TC', 'AUDIO_TC', 'DOC_PREVIEW', 'TEXT_EXTRACT',
     ];
 
     private const array EXCLUDED_TYPES = [
         'OCR', 'STT', 'AI_ANALYSIS', 'WAVEFORM',
-        'DOC_PREVIEW', 'TEXT_EXTRACT',
     ];
 
     public function test_implemented_handlers_are_registered(): void
@@ -49,7 +48,7 @@ class MvpScopeGuardTest extends TestCase
         $handlerDir = app_path('Services/Workflow/Worker/Handlers');
         $files = array_map('basename', glob($handlerDir.'/*.php') ?: []);
 
-        $forbidden = ['Ocr', 'Stt', 'AiAnalysis', 'Hls', 'Waveform', 'DocumentPreview', 'TextExtract'];
+        $forbidden = ['Ocr', 'Stt', 'AiAnalysis', 'Hls', 'Waveform'];
 
         foreach ($files as $file) {
             foreach ($forbidden as $prefix) {

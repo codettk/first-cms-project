@@ -4,18 +4,20 @@ namespace App\Services\Workflow\Worker\Handlers;
 
 use App\Enums\FailureType;
 use App\Enums\IndexStatus;
+use App\Models\MediaRendition;
 use App\Models\SearchIndexState;
 use App\Models\WorkflowJob;
 use App\Services\Workflow\Search\SearchIndexClient;
 use App\Services\Workflow\StateMachine\SearchIndexStateMachine;
+use App\Services\Workflow\Storage\MediaStorageService;
 use App\Services\Workflow\Worker\JobExecutionContext;
 use App\Services\Workflow\Worker\JobResult;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * INDEX — 메타데이터 취합 → 색인 upsert → 조회 검증 → search_index_states 갱신 (Worker Agent Spec §9).
- * 엔진 오류는 SEARCH_ENGINE_ERROR(재시도, base 30초 백오프).
+ * INDEX — 메타데이터+추출 텍스트 취합 → 색인 upsert → 조회 검증 → search_index_states 갱신
+ * (Worker Agent Spec §9 · Job Type Def §3.11). 엔진 오류는 SEARCH_ENGINE_ERROR(재시도, base 30초).
  */
 class IndexJobHandler extends AbstractJobHandler
 {
@@ -24,6 +26,7 @@ class IndexJobHandler extends AbstractJobHandler
     public function __construct(
         private readonly SearchIndexClient $client,
         private readonly SearchIndexStateMachine $stateMachine,
+        private readonly MediaStorageService $storage,
     ) {}
 
     public function handle(WorkflowJob $job, JobExecutionContext $ctx): JobResult
@@ -39,6 +42,7 @@ class IndexJobHandler extends AbstractJobHandler
             'media_type' => $content->media_type?->value,
             'duration_ms' => $this->durationMs($mediaFile?->media_info),
             'indexed_from_instance' => $job->instance_id,
+            ...$this->extractedTexts($content->id),
         ];
 
         $ctx->progress->report($job->id, 30.0, 'indexing document');
@@ -85,6 +89,35 @@ class IndexJobHandler extends AbstractJobHandler
         $ctx->progress->report($job->id, 100.0, 'indexed');
 
         return JobResult::success(['index_doc_id' => $documentId, 'index_version' => $newVersion]);
+    }
+
+    /**
+     * 추출 텍스트 취합 — TEXT_EXTRACT·OCR 산출 rendition의 파일 내용 (Job Type Def §3.11 입력).
+     *
+     * @return array<string, string>
+     */
+    private function extractedTexts(int $contentId): array
+    {
+        $fields = [];
+
+        foreach (['EXTRACTED_TEXT' => 'extracted_text', 'OCR_TEXT' => 'ocr_text'] as $type => $field) {
+            $rendition = MediaRendition::query()
+                ->where('content_id', $contentId)
+                ->where('rendition_type', $type)
+                ->first();
+
+            if ($rendition === null) {
+                continue;
+            }
+
+            $abs = $this->storage->absolutePath($rendition->storage_zone, $rendition->path);
+
+            if (is_file($abs)) {
+                $fields[$field] = (string) file_get_contents($abs);
+            }
+        }
+
+        return $fields;
     }
 
     private function durationMs(mixed $mediaInfo): ?int

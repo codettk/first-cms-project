@@ -13,10 +13,17 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * MA — media_info 추출 · media_type 확정 · contents.media_type 갱신 (Worker Agent Spec §9).
+ * 문서(PDF·Office)는 ffprobe 대상이 아니다 — 기본 속성만 추출하고 DOC 확정 (Job Type Def §3.8).
  */
 class MediaAnalyzeJobHandler extends AbstractJobHandler
 {
     protected const string JOB_TYPE = 'MA';
+
+    private const array DOCUMENT_MIMES = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ];
 
     public function __construct(
         private readonly MediaStorageService $storage,
@@ -32,6 +39,20 @@ class MediaAnalyzeJobHandler extends AbstractJobHandler
 
         if ($master === null) {
             return JobResult::failure(FailureType::StorageError, 'STORAGE_IO', 'MASTER rendition row missing');
+        }
+
+        $detectedMime = (string) ($ctx->mediaFile()?->detected_mime ?? '');
+
+        if (in_array($detectedMime, self::DOCUMENT_MIMES, true)) {
+            DB::table('contents')->where('id', $job->content_id)
+                ->update(['media_type' => 'DOC']);
+
+            $ctx->progress->report($job->id, 100.0, 'analyzed');
+
+            return JobResult::success([
+                'media_type' => 'DOC',
+                'detected_mime' => $detectedMime,
+            ]);
         }
 
         $abs = $this->storage->absolutePath($master->storage_zone, $master->path);

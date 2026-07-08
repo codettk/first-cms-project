@@ -147,7 +147,9 @@ class RunbookGateScenarioTest extends TestCase
                 return $this->documents[$documentId] ?? null;
             }
         };
-        app(HandlerRegistry::class)->register(new IndexJobHandler($engine, app(SearchIndexStateMachine::class)));
+        app(HandlerRegistry::class)->register(new IndexJobHandler(
+            $engine, app(SearchIndexStateMachine::class), app(\App\Services\Workflow\Storage\MediaStorageService::class),
+        ));
 
         $job = WorkflowJob::factory()->ready()->ofType(JobType::Index)->create(['max_retry' => 5]);
         $worker = WorkflowWorkerAgent::factory()->online()->create(['supported_job_types' => ['INDEX']]);

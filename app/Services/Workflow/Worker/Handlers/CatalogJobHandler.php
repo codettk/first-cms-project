@@ -16,7 +16,7 @@ use App\Services\Workflow\Worker\Tools\ToolRunner;
 /**
  * CA — 대표 썸네일 1건 + 카탈로그 N건 (Worker Agent Spec §9 · Job Type Def §3.7).
  * 입력은 Proxy(Master 접근 금지). 대표 실패는 실패, 카탈로그 부분 실패는 SUCCESS + WARN.
- * 유형별 동작(§4 매트릭스): VIDEO 썸네일+카탈로그 / IMAGE 썸네일만 — 카탈로그 없음.
+ * 유형별 동작(§4 매트릭스): VIDEO 썸네일+카탈로그 / IMAGE 썸네일만 / DOC 1페이지 기반 썸네일만.
  */
 class CatalogJobHandler extends AbstractJobHandler
 {
@@ -33,6 +33,7 @@ class CatalogJobHandler extends AbstractJobHandler
     {
         return match ($ctx->content()->media_type?->value) {
             'IMAGE' => $this->handleImage($job, $ctx),
+            'DOC' => $this->handleDocument($job, $ctx),
             default => $this->handleVideo($job, $ctx),
         };
     }
@@ -49,13 +50,39 @@ class CatalogJobHandler extends AbstractJobHandler
             return JobResult::failure(FailureType::StorageError, 'STORAGE_IO', 'PROXY_IMAGE rendition missing — CA input is proxy only');
         }
 
-        $inputAbs = $this->storage->absolutePath($proxy->storage_zone, $proxy->path);
+        return $this->thumbnailFromStillImage($job, $ctx, $proxy, 'IMAGE_THUMBNAIL_WEBP_480');
+    }
 
-        if (! is_file($inputAbs)) {
-            return JobResult::failure(FailureType::StorageError, 'STORAGE_IO', 'proxy image file missing on storage');
+    /** DOC — 1페이지 Preview를 리사이즈한 대표 썸네일 1건만 생성 (Job Type Def §3.7) */
+    private function handleDocument(WorkflowJob $job, JobExecutionContext $ctx): JobResult
+    {
+        $pageOne = MediaRendition::query()
+            ->where('content_id', $job->content_id)
+            ->where('rendition_type', 'PAGE_PREVIEW')
+            ->where('page_no', 1)
+            ->first();
+
+        if ($pageOne === null) {
+            return JobResult::failure(FailureType::StorageError, 'STORAGE_IO', 'PAGE_PREVIEW page 1 missing — CA input is preview only');
         }
 
-        $thumbProfile = $this->compiler->loadByCode('IMAGE_THUMBNAIL_WEBP_480');
+        return $this->thumbnailFromStillImage($job, $ctx, $pageOne, 'THUMBNAIL_DEFAULT');
+    }
+
+    /** 정지 이미지 rendition → 대표 썸네일 1건 (vipsthumbnail 리사이즈) */
+    private function thumbnailFromStillImage(
+        WorkflowJob $job,
+        JobExecutionContext $ctx,
+        MediaRendition $source,
+        string $thumbnailProfileCode,
+    ): JobResult {
+        $inputAbs = $this->storage->absolutePath($source->storage_zone, $source->path);
+
+        if (! is_file($inputAbs)) {
+            return JobResult::failure(FailureType::StorageError, 'STORAGE_IO', 'thumbnail source file missing on storage');
+        }
+
+        $thumbProfile = $this->compiler->loadByCode($thumbnailProfileCode);
 
         $ctx->progress->report($job->id, 20.0, 'resizing thumbnail');
 
@@ -74,7 +101,7 @@ class CatalogJobHandler extends AbstractJobHandler
 
         $this->renditions->upsert([
             'content_id' => $job->content_id,
-            'media_file_id' => $proxy->media_file_id,
+            'media_file_id' => $source->media_file_id,
             'rendition_type' => 'THUMBNAIL',
             'storage_zone' => StorageZone::Thumbnail->value,
             'variant_key' => $thumbProfile->variant_key,

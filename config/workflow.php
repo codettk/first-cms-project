@@ -24,6 +24,11 @@ return [
         'ffprobe' => env('WORKFLOW_TOOL_FFPROBE', 'ffprobe'),
         // IMAGE 파이프라인 — Transcode Profile Spec §12 (libvips)
         'vipsthumbnail' => env('WORKFLOW_TOOL_VIPSTHUMBNAIL', 'vipsthumbnail'),
+        // DOC 파이프라인 — Transcode Profile Spec §13 (poppler·LibreOffice)
+        'pdfinfo' => env('WORKFLOW_TOOL_PDFINFO', 'pdfinfo'),
+        'pdftoppm' => env('WORKFLOW_TOOL_PDFTOPPM', 'pdftoppm'),
+        'pdftotext' => env('WORKFLOW_TOOL_PDFTOTEXT', 'pdftotext'),
+        'soffice' => env('WORKFLOW_TOOL_SOFFICE', 'soffice'),
     ],
 
     // 검색 색인 driver — dev(cache mock)|elasticsearch|opensearch (ADR-0005).
