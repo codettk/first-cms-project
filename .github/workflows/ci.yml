@@ -25,7 +25,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -33,8 +33,8 @@ jobs:
           extensions: pdo_pgsql, pgsql, mbstring, intl
           coverage: none
 
-      - name: Install ffmpeg (E2E pipeline test)
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install workflow media toolchain (E2E pipeline tests)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libvips-tools poppler-utils libreoffice
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
@@ -68,8 +68,8 @@ jobs:
     name: OpenAPI contract lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
       - name: Spectral lint (0 errors, 0 warnings gate)
