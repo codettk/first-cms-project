@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Services\Workflow\Search\DevSearchIndexClient;
+use App\Services\Workflow\Search\ElasticsearchSearchIndexClient;
+use App\Services\Workflow\Search\OpenSearchSearchIndexClient;
 use App\Services\Workflow\Search\SearchIndexClient;
 use App\Services\Workflow\Worker\HandlerRegistry;
 use App\Services\Workflow\Worker\Handlers\CatalogJobHandler;
@@ -44,9 +46,21 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->bind(ToolRunner::class, SymfonyProcessToolRunner::class);
 
-        // 운영 배포 전 실제 검색엔진 클라이언트로 교체 필수 —
-        // Mock INDEX는 개발 테스트용만 허용 (Roadmap Phase 5 · ADR 예정)
-        $this->app->bind(SearchIndexClient::class, DevSearchIndexClient::class);
+        // 검색 색인 driver 선택 (ADR-0005) — dev는 개발 테스트용만 허용,
+        // 운영 게이트는 실제 driver(elasticsearch/opensearch) 기준 (Roadmap Phase 5)
+        $this->app->bind(SearchIndexClient::class, function ($app) {
+            $config = (array) $app['config']->get('workflow.search');
+            $driver = $config['driver'] ?? 'dev';
+
+            return match ($driver) {
+                'dev' => new DevSearchIndexClient,
+                'elasticsearch' => new ElasticsearchSearchIndexClient($config),
+                'opensearch' => new OpenSearchSearchIndexClient($config),
+                default => throw new \InvalidArgumentException(
+                    "지원하지 않는 workflow.search.driver [{$driver}] — dev|elasticsearch|opensearch만 허용",
+                ),
+            };
+        });
 
         // Handler 등록의 단일 지점 — Worker Agent Spec §2
         $this->app->singleton(HandlerRegistry::class, function ($app) {

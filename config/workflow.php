@@ -23,4 +23,20 @@ return [
         'ffmpeg' => env('WORKFLOW_TOOL_FFMPEG', 'ffmpeg'),
         'ffprobe' => env('WORKFLOW_TOOL_FFPROBE', 'ffprobe'),
     ],
+
+    // 검색 색인 driver — dev(cache mock)|elasticsearch|opensearch (ADR-0005).
+    // dev는 개발 테스트용만 허용, 운영 게이트는 실제 driver 기준 (Roadmap Phase 5)
+    'search' => [
+        'driver' => env('WORKFLOW_SEARCH_DRIVER', 'dev'),
+        'index' => env('WORKFLOW_SEARCH_INDEX', 'content_mam'),
+        'hosts' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('WORKFLOW_SEARCH_HOSTS', '')),
+        ))),
+        'username' => env('WORKFLOW_SEARCH_USERNAME'),
+        'password' => env('WORKFLOW_SEARCH_PASSWORD'),
+        'api_key' => env('WORKFLOW_SEARCH_API_KEY'), // Elasticsearch 전용 — basic보다 우선
+        'verify_ssl' => filter_var(env('WORKFLOW_SEARCH_VERIFY_SSL', true), FILTER_VALIDATE_BOOL),
+        'timeout' => (int) env('WORKFLOW_SEARCH_TIMEOUT', 10),
+    ],
 ];
