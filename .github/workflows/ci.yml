@@ -34,7 +34,12 @@ jobs:
           coverage: none
 
       - name: Install workflow media toolchain (E2E pipeline tests)
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libvips-tools poppler-utils libreoffice
+        # libreoffice 메타패키지는 recommends 의존성이 커서 러너에서 20분 이상 소요/행 —
+        # DOC 파이프라인이 쓰는 변환 컴포넌트(writer·impress)만 비대화형으로 설치한다
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ffmpeg libvips-tools poppler-utils libreoffice-writer libreoffice-impress
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
