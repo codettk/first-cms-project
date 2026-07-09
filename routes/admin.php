@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AlertController;
 use App\Http\Controllers\Admin\ContentWorkflowController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\JobController;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\Route;
  * Admin Workflow API — Controller Service Spec §3.
  * audit.context = 전 요청 actor/ip/UA 수집만 · audit.write = 조작 라우트만(저장 경로 활성).
  * GET은 admin_audit_logs 저장 대상이 아니다 (Revision Checklist §5).
- * Alerts API는 계약만 유지하고 구현 보류 — 라우트 미등록 (ADR-0002).
+ * Alerts API는 ADR-0006으로 영속화·구현됨 (ADR-0002 개정).
  */
 Route::prefix('admin/workflows')
     ->middleware(['auth', \Illuminate\Routing\Middleware\SubstituteBindings::class, 'audit.context'])
@@ -37,6 +38,10 @@ Route::prefix('admin/workflows')
             ->middleware('audit.write')->can('workflow.release_lock');
         Route::patch('jobs/{job}/priority', [JobController::class, 'updatePriority'])
             ->middleware('audit.write')->can('workflow.retry');
+
+        Route::get('alerts', [AlertController::class, 'index'])->can('workflow.view');
+        Route::post('alerts/{alert}/ack', [AlertController::class, 'ack'])
+            ->middleware('audit.write')->can('workflow.view');
 
         Route::get('workers', [WorkerController::class, 'index'])->can('workflow.view');
         Route::post('workers/{worker}/disable', [WorkerController::class, 'disable'])

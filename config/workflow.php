@@ -34,6 +34,14 @@ return [
         'audiowaveform' => env('WORKFLOW_TOOL_AUDIOWAVEFORM', 'audiowaveform'),
     ],
 
+    // 운영 알림 — HIGH 이벤트 이메일 수신자, 콤마 구분 (ADR-0006 · 빈 값이면 발송 생략)
+    'alerts' => [
+        'mail_to' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('WORKFLOW_ALERT_MAIL_TO', '')),
+        ))),
+    ],
+
     // 검색 색인 driver — dev(cache mock)|elasticsearch|opensearch (ADR-0005).
     // dev는 개발 테스트용만 허용, 운영 게이트는 실제 driver 기준 (Roadmap Phase 5)
     'search' => [

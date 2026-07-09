@@ -12,6 +12,7 @@ use App\Models\SearchIndexState;
 use App\Models\WorkflowInstance;
 use App\Models\WorkflowJob;
 use App\Models\WorkflowWorkerAgent;
+use App\Services\Workflow\Admin\AlertService;
 use App\Services\Workflow\Queue\JobRetryPolicy;
 use App\Services\Workflow\StateMachine\ContentStateMachine;
 use App\Services\Workflow\StateMachine\JobStateMachine;
@@ -41,6 +42,7 @@ class WorkflowSchedulerService
         private readonly WorkflowInstanceStateMachine $instances,
         private readonly WorkerStateMachine $workers,
         private readonly JobRetryPolicy $retryPolicy,
+        private readonly AlertService $alerts,
     ) {}
 
     public function tryAcquireAdvisoryLock(): bool
@@ -126,6 +128,16 @@ class WorkflowSchedulerService
                     $this->contents->transition($content, ContentStatus::Failed->value, 'scheduler');
                 }
             });
+
+            // 관리자 즉시 알림 — HIGH + 이메일 채널 (Wireframe §13 · ADR-0006)
+            $this->alerts->raise(
+                'HIGH', 'REQUIRED_JOB_FAILED',
+                ($instance->content->title ?? "content #{$failed->content_id}")
+                    ." {$failed->job_type->value} 실패 — 콘텐츠 처리 중단",
+                contentId: $failed->content_id,
+                jobId: $failed->id,
+                actionLink: "/admin/workflows/jobs/{$failed->id}",
+            );
         }
 
         // (b) 취소 전파 — CANCELED job의 후속은 필수 여부 무관 SKIPPED, 필수면 인스턴스 CANCELED
@@ -416,6 +428,14 @@ class WorkflowSchedulerService
             foreach ($locks as $lock) {
                 $this->reclaimLock($lock->job_id, 'worker_offline', 'WORKER_CRASH');
             }
+
+            // 관리자 알림 — HIGH (Wireframe §13 · ADR-0006)
+            $this->alerts->raise(
+                'HIGH', 'WORKER_OFFLINE',
+                "{$agent->worker_name} 연결 끊김 (".self::WORKER_OFFLINE_AFTER_SECONDS.'초)',
+                workerId: $agent->id,
+                actionLink: '/admin/workflows/workers',
+            );
 
             $count++;
         }

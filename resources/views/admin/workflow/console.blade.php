@@ -93,6 +93,7 @@ a.link { color: var(--accent-text); text-decoration: none; font-weight: 500; }
     <a class="navlink" data-nav href="#/jobs?status=FAILED">실패 Job</a>
     <a class="navlink" data-nav href="#/jobs">Job 전체</a>
     <a class="navlink" data-nav href="#/workers">Worker 상태</a>
+    <a class="navlink" data-nav href="#/alerts">알림센터</a>
   </aside>
   <main class="main" id="view"><div class="empty">불러오는 중…</div></main>
 </div>
@@ -116,6 +117,7 @@ const BADGE = { // §12 색상 정책
   job: { WAITING:'neutral', READY:'accent', RUNNING:'accent pulse', SUCCESS:'ok', FAILED:'danger', RETRY:'warn', SKIPPED:'neutral', CANCELED:'neutral', TIMEOUT:'danger' },
   worker: { ONLINE:'ok', BUSY:'accent', OFFLINE:'danger', DISABLED:'neutral', ERROR:'danger' },
   index: { PENDING:'neutral', INDEXED:'ok', STALE:'warn', FAILED:'danger' },
+  alert: { HIGH:'danger', MED:'warn', LOW:'neutral' },
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -465,6 +467,33 @@ async function renderWorkers() {
     <p style="color:var(--text-3);font-size:12px">Worker 비활성화·ERROR 해제는 HIGH 권한 조작으로 기본 화면에 노출하지 않습니다 (MVP Scope §2).</p>`;
 }
 
+/* ── 알림센터 (Wireframe §13 · ADR-0006) ── */
+async function renderAlerts(params) {
+  const qs = new URLSearchParams(params).toString();
+  const { data } = await api('/alerts' + (qs ? '?' + qs : ''));
+  const rows = (data ?? []).map(a => `<tr>
+      <td>${badge('alert', a.severity)}</td>
+      <td>${esc(a.event_type)}</td>
+      <td>${esc(a.message)}</td>
+      <td>${esc(a.created_at ?? '')}</td>
+      <td>${a.acknowledged_at ? '확인됨' : `<button class="btn" data-ack="${a.alert_id}">확인</button>`}</td>
+    </tr>`).join('');
+
+  view.innerHTML = `
+    <div class="page-title">알림센터</div>
+    <div class="panel">
+      <table class="table">
+        <thead><tr><th>심각도</th><th>이벤트</th><th>메시지</th><th>발생</th><th>확인</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="empty">알림 없음</td></tr>'}</tbody>
+      </table>
+    </div>`;
+
+  view.querySelectorAll('[data-ack]').forEach(btn => btn.addEventListener('click', async () => {
+    await api('/alerts/' + btn.dataset.ack + '/ack', { method: 'POST', body: JSON.stringify({}) });
+    toast('알림 확인 처리됨'); route();
+  }));
+}
+
 /* ── hash 라우터 ── */
 async function route() {
   const hash = location.hash || '#/dashboard';
@@ -482,6 +511,7 @@ async function route() {
     else if (segments[0] === 'jobs' && segments[1]) await renderJobDetail(segments[1]);
     else if (segments[0] === 'jobs') await renderJobs(params);
     else if (segments[0] === 'workers') await renderWorkers();
+    else if (segments[0] === 'alerts') await renderAlerts(params);
   } catch (e) {
     view.innerHTML = `<div class="empty">불러오기 실패: ${esc(e.message)}</div>`;
   }

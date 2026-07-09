@@ -54,8 +54,14 @@ WBS Milestone Plan §M5 · Implementation Roadmap Phase 8 · Incident Response R
 
 ## 5. 알림 발송
 
-- 대시보드 배너(HIGH): OFFLINE Worker · 필수 job FAILED — 구현·테스트 완료
-- 이메일/외부 채널 발송: alerts 영속화와 함께 **보류 (ADR-0002)** — DB 스펙 개정 후 진행
+- 대시보드 배너(HIGH): OFFLINE Worker · 필수 job FAILED — 구현·테스트 완료 (실시간 파생 유지)
+- 알림센터(영속화): `workflow_alerts` 테이블 + `GET /alerts`·`POST /alerts/{id}/ack`(멱등·감사 기록)
+  \+ 콘솔 알림센터 화면 — **구현 (ADR-0006, ADR-0002 개정)**
+- 이메일 발송: HIGH 이메일 채널 이벤트(필수 실패 등) — `WORKFLOW_ALERT_MAIL_TO` 설정 시 발송,
+  미설정 시 생략. 발송 실패는 경고 로그만(Scheduler 비중단)
+- 이벤트 소스: Scheduler 틱의 REQUIRED_JOB_FAILED·WORKER_OFFLINE부터 — Wireframe §13의
+  나머지 이벤트(Storage I/O·Master 누락 등)는 감지 지점 구현 시 동일 경로로 추가
+- 자동화 근거: `tests/Feature/Admin/AlertApiTest.php`
 
 ## 6. 실 검색엔진 검증 (ADR-0005 운영 전환)
 

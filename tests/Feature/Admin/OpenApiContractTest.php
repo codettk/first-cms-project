@@ -9,11 +9,11 @@ use Tests\TestCase;
 /**
  * OpenAPI ↔ 라우트 계약 대조 — Revision Checklist §9-③.
  * x-permission ↔ route can 미들웨어 · 경로/메서드 존재 · retry-batch 선순위.
- * Alerts API는 계약만 유지·구현 보류(ADR-0002)라 라우트 대조에서 제외한다.
+ * Alerts API 포함 전 계약(17엔드포인트)을 라우트와 대조한다 (ADR-0006).
  */
 class OpenApiContractTest extends TestCase
 {
-    private const array DEFERRED_PATHS = ['/alerts', '/alerts/{id}/ack']; // ADR-0002
+    private const array DEFERRED_PATHS = []; // 보류 경로 없음 — Alerts는 ADR-0006으로 구현
 
     /** @return array<string, array<string, array<string, mixed>>> */
     private function contractPaths(): array
