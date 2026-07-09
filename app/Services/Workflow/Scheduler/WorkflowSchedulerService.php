@@ -77,10 +77,14 @@ class WorkflowSchedulerService
         $candidates = WorkflowJob::query()
             ->where('workflow_jobs.status', JobStatus::Waiting->value)
             ->where('workflow_jobs.job_type', '<>', 'PUBLISH')
-            // SUCCESS 포함 — CLEANUP은 PUBLISH가 인스턴스를 SUCCESS로 종결한 뒤 실행된다
-            ->whereRelation('instance', fn ($q) => $q->whereIn(
-                'status', [InstanceStatus::Running->value, InstanceStatus::Success->value]
-            ))
+            // SUCCESS 포함 — CLEANUP은 PUBLISH가 인스턴스를 SUCCESS로 종결한 뒤 실행된다.
+            // instance_id NULL은 단독 재색인 job — 인스턴스 수명과 무관 (ADR-0007)
+            ->where(function ($q) {
+                $q->whereNull('workflow_jobs.instance_id')
+                    ->orWhereHas('instance', fn ($i) => $i->whereIn(
+                        'status', [InstanceStatus::Running->value, InstanceStatus::Success->value]
+                    ));
+            })
             ->whereNotExists(function ($q) {
                 $q->select(DB::raw(1))
                     ->from('workflow_job_dependencies as d')
@@ -230,7 +234,7 @@ class WorkflowSchedulerService
     }
 
     /**
-     * ③-b STALE 재색인 — 색인 갱신 필요 콘텐츠에 단독 INDEX job 생성 (SM Spec §14).
+     * ③-b STALE 재색인 — 인스턴스 무소속 단독 INDEX job 생성 (SM Spec §14 · ADR-0007).
      * 메타 수정·선택 작업(OCR 등) SUCCESS가 INDEXED→STALE로 마킹한 상태를 소진한다.
      */
     private function createStaleReindexJobs(): int
@@ -256,20 +260,19 @@ class WorkflowSchedulerService
                 continue;
             }
 
-            // 승격 가능한 인스턴스(RUNNING|SUCCESS)에만 부착 — 없으면 수동 재색인 대상으로 남긴다
-            $instance = WorkflowInstance::query()
-                ->where('content_id', $state->content_id)
-                ->whereIn('status', [InstanceStatus::Running->value, InstanceStatus::Success->value])
-                ->orderByDesc('id')
-                ->first();
+            // READY 콘텐츠만 자동 재색인 — FAILED/ARCHIVED/DELETED는 수동 대상 (ADR-0007)
+            $contentReady = Content::query()
+                ->whereKey($state->content_id)
+                ->where('status', ContentStatus::Ready->value)
+                ->exists();
 
-            if ($instance === null) {
+            if (! $contentReady) {
                 continue;
             }
 
-            DB::transaction(function () use ($state, $instance) {
+            DB::transaction(function () use ($state) {
                 $job = WorkflowJob::create([
-                    'instance_id' => $instance->id,
+                    'instance_id' => null,  // 단독 job — 기존 인스턴스와 무관 (SM Spec §14)
                     'content_id' => $state->content_id,
                     'job_type' => 'INDEX',
                     'status' => JobStatus::Waiting,

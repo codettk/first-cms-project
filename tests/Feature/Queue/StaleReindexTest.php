@@ -14,9 +14,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * STALE 재색인 루프 — SM Spec §14 (INDEXED→STALE→INDEXED) · Queue Worker Spec §12 (재색인 priority 50).
- * Scheduler 틱이 STALE 상태에 단독 INDEX job(is_required=false)을 생성하고,
- * INDEX worker 실행으로 STALE→INDEXED가 소진되는지 검증한다.
+ * STALE 재색인 루프 — SM Spec §14 (INDEXED→STALE→INDEXED) · ADR-0007 (단독 job) ·
+ * Queue Worker Spec §12 (재색인 priority 50).
+ * 파이프라인 인스턴스에 이미 SUCCESS INDEX job이 있어도(UNIQUE 제약) Scheduler가
+ * 인스턴스 무소속 단독 INDEX job을 생성하고, INDEX worker 실행으로 STALE→INDEXED가
+ * 소진되는지 검증한다.
  */
 class StaleReindexTest extends TestCase
 {
@@ -31,12 +33,20 @@ class StaleReindexTest extends TestCase
         $this->scheduler = app(WorkflowSchedulerService::class);
     }
 
-    /** @return array{0: Content, 1: WorkflowInstance, 2: SearchIndexState} */
-    private function makeStaleContent(string $instanceStatus = 'SUCCESS'): array
+    /**
+     * READY 콘텐츠 + SUCCESS 인스턴스(SUCCESS INDEX job 보유 — unique 충돌 재현) + STALE 상태.
+     *
+     * @return array{0: Content, 1: WorkflowInstance, 2: SearchIndexState}
+     */
+    private function makeStaleContent(string $contentStatus = 'READY'): array
     {
-        $content = Content::factory()->create(['status' => 'READY']);
+        $content = Content::factory()->create(['status' => $contentStatus]);
         MediaFile::factory()->for($content)->create();
-        $instance = WorkflowInstance::factory()->for($content, 'content')->create(['status' => $instanceStatus]);
+        $instance = WorkflowInstance::factory()->for($content, 'content')->create(['status' => 'SUCCESS']);
+        WorkflowJob::factory()->create([
+            'instance_id' => $instance->id, 'content_id' => $content->id,
+            'job_type' => 'INDEX', 'status' => 'SUCCESS', 'finished_at' => now(),
+        ]);
         $state = SearchIndexState::create([
             'content_id' => $content->id, 'status' => 'STALE',
             'index_version' => 1, 'index_doc_id' => "content-{$content->id}",
@@ -45,7 +55,7 @@ class StaleReindexTest extends TestCase
         return [$content, $instance, $state];
     }
 
-    public function test_tick_creates_single_reindex_job_for_stale_state(): void
+    public function test_tick_creates_standalone_reindex_job_despite_completed_pipeline_index(): void
     {
         [$content] = $this->makeStaleContent();
 
@@ -53,7 +63,8 @@ class StaleReindexTest extends TestCase
         $this->assertSame(1, $counts['reindex']);
 
         $job = WorkflowJob::query()
-            ->where('content_id', $content->id)->where('job_type', 'INDEX')->firstOrFail();
+            ->where('content_id', $content->id)->where('job_type', 'INDEX')
+            ->whereNull('instance_id')->firstOrFail();
         $this->assertSame('WAITING', $job->status->value);
         $this->assertFalse((bool) $job->is_required); // 재색인 실패는 콘텐츠 비차단 (SM Spec §7)
         $this->assertSame(50, (int) $job->priority);  // 재색인 우선순위 (Queue Worker Spec §12)
@@ -61,19 +72,20 @@ class StaleReindexTest extends TestCase
             'job_id' => $job->id, 'to_status' => 'WAITING', 'note' => 'stale_reindex',
         ]);
 
-        // 다음 틱 — 의존 없음 + 인스턴스 SUCCESS라도 READY 승격, 중복 생성은 없다
+        // 다음 틱 — 단독 job은 인스턴스 상태와 무관하게 READY 승격, 중복 생성은 없다
         $counts = $this->scheduler->tick();
         $this->assertSame(0, $counts['reindex']);
         $this->assertSame('READY', $job->fresh()->status->value);
         $this->assertSame(1, WorkflowJob::query()
-            ->where('content_id', $content->id)->where('job_type', 'INDEX')->count());
+            ->where('content_id', $content->id)->where('job_type', 'INDEX')
+            ->whereNull('instance_id')->count());
     }
 
     public function test_active_index_job_blocks_duplicate_creation(): void
     {
-        [$content, $instance] = $this->makeStaleContent();
+        [$content] = $this->makeStaleContent();
         WorkflowJob::factory()->create([
-            'instance_id' => $instance->id, 'content_id' => $content->id,
+            'instance_id' => null, 'content_id' => $content->id,
             'job_type' => 'INDEX', 'status' => 'READY',
         ]);
 
@@ -81,18 +93,20 @@ class StaleReindexTest extends TestCase
 
         $this->assertSame(0, $counts['reindex']);
         $this->assertSame(1, WorkflowJob::query()
-            ->where('content_id', $content->id)->where('job_type', 'INDEX')->count());
+            ->where('content_id', $content->id)->where('job_type', 'INDEX')
+            ->whereNull('instance_id')->count());
     }
 
-    public function test_no_reindex_job_without_promotable_instance(): void
+    public function test_no_reindex_job_for_non_ready_content(): void
     {
-        [$content] = $this->makeStaleContent(instanceStatus: 'FAILED');
+        [$content] = $this->makeStaleContent(contentStatus: 'FAILED');
 
         $counts = $this->scheduler->tick();
 
         $this->assertSame(0, $counts['reindex']);
         $this->assertSame(0, WorkflowJob::query()
-            ->where('content_id', $content->id)->where('job_type', 'INDEX')->count());
+            ->where('content_id', $content->id)->where('job_type', 'INDEX')
+            ->whereNull('instance_id')->count());
     }
 
     public function test_reindex_worker_run_consumes_stale_back_to_indexed(): void
@@ -112,6 +126,6 @@ class StaleReindexTest extends TestCase
         $this->assertSame(2, (int) $fresh->index_version);
         $this->assertSame('SUCCESS', WorkflowJob::query()
             ->where('content_id', $content->id)->where('job_type', 'INDEX')
-            ->firstOrFail()->status->value);
+            ->whereNull('instance_id')->firstOrFail()->status->value);
     }
 }
