@@ -26,12 +26,26 @@ WBS Milestone Plan §M5 · Implementation Roadmap Phase 8 · Incident Response R
 | 6 | INDEX 실패 백오프/재시도 | `tests/Feature/E2E/RunbookGateScenarioTest.php::test_search_engine_outage_backs_off_then_recovers_automatically` | 검색엔진 중단 → INDEX_UNAVAILABLE 백오프(base 30초) → 엔진 복구 후 자동 SUCCESS·INDEXED 회복 (Runbook §6-15) |
 | 7 | 콘텐츠 취소 정리 | `tests/Feature/Admin/AdminCommandApiTest.php::test_content_cancel_cancels_pipeline` · `tests/Feature/Queue/SchedulerTest.php::test_unresponsive_cancel_is_forced_by_scheduler` | 처리 중 콘텐츠 취소 → 비종결 job CANCELED·RUNNING cancel_requested·30초 무반응 강제 전이 확인 (Runbook §6-24) |
 
+> **수행 이력 (2026-07-10, 로컬 Docker 환경)** — 리허설 7종 전건 수행·통과.
+> 도구: `scripts/ops/rehearsal/rehearsal-part{1,2,3}.php` (전용 DB `first_cms_rehearsal` ·
+> 실 ES 8.17 컨테이너 · 실제 worker 데몬 spawn/kill · 실 ffmpeg).
+> ① Worker kill — 프로세스 강제 종료 → 90초 경과 첫 틱에 OFFLINE 판정·lock 회수·WORKER_CRASH RETRY → 다른 worker로 READY 복구
+> ② Storage 차단 — MASTER zone 차단 → TM RETRY → 해제 후 자동 READY(retry_count 증가)
+> ③ Scheduler 정지 — 틱 중단 100초 후 재기동 첫 틱만으로 고아 RUNNING 회수
+> ④ 필수 실패 — 손상 파일 → VERIFY FAILED → SKIPPED 전파·콘텐츠 FAILED·HIGH 배너·alert 영속화
+> ⑤ Lock 타임아웃 — TIMEOUT 경유 RETRY(TOOL_TIMEOUT)·만료 lock 회수
+> ⑥ INDEX 백오프 — ES 컨테이너 stop → INDEX_UNAVAILABLE 백오프 → start 후 자동 READY·INDEXED 회복
+> ⑦ 취소 정리 — RUNNING TC cancel_requested → 30초 무반응 강제 CANCELED·비종결 후속 CANCELED·감사 기록
+> 운영 인프라 확보 시 동일 스크립트 절차로 반복한다.
+
 ## 3. 부하/동시성 검증 (T5)
 
 - 자동화 근거: `tests/Feature/E2E/RunbookGateScenarioTest.php::test_ten_concurrent_uploads_all_reach_ready_without_double_execution`
   (동시 업로드 10건 × 8 job = 80 job, Worker 3대 — 이중 실행 0건·전건 READY)
 - 행 단위 경합: `tests/Feature/Queue/ClaimConcurrencyTest.php` (SKIP LOCKED·locks PK 이중 lease 차단·priority 정렬)
-- 실 환경 부하 테스트(목표 처리량·TC 병목 리포트)는 운영 인프라 확정 후 별도 수행 — **미완, M5 잔여 항목**
+- 로컬 부하 수행 이력 (2026-07-10): 동시 10건 × 8 job = 80 job, **실제 worker 데몬 3대 + 실 ES 색인** —
+  전건 READY·중복 SUCCESS 전이 0건 (`rehearsal-part3.php` S7)
+- 운영 처리량 목표(TC 병목 리포트) 기준 부하는 운영 인프라 확보 후 동일 절차로 반복
 
 ## 4. 모니터링 지표 10종 ↔ 대시보드 매핑
 
@@ -86,7 +100,9 @@ WBS Milestone Plan §M5 · Implementation Roadmap Phase 8 · Incident Response R
   - [ ] Search Index INDEXED 회복 · STALE 잔량 소진 중
   - [ ] 수동 조작 전건 admin_audit_logs에 사유와 함께 기록됨
   - [ ] 장애 영향 콘텐츠 재시도/재처리 → READY 확인
-- 백업/복구 리허설(DB·MASTER zone): 운영 인프라 확정 후 수행 — **미완, M5 잔여 항목**
+- 백업/복구 리허설(DB·MASTER zone) 수행 이력 (2026-07-10, 로컬): `pg_dump -Fc` → 신규 DB
+  `pg_restore` — 주요 6테이블 행수 전건 일치, MASTER zone 20파일 SHA256 전건 일치.
+  운영 백업 정책(주기·보존·오프사이트) 기반 반복은 인프라 확정 후
 
 ## 8. 미구현 선택 job 잔여 대기 정책 (의도된 상태)
 
@@ -109,27 +125,28 @@ STT의 동작은 다음과 같으며 **운영상 의도된 잔여 대기**다.
 스펙 §14 개정이 선행돼야 하며, 가드는
 `MvpScopeGuardTest::test_only_720p_profile_is_active_in_video_proxies`가 잠근다.
 
-## 9. 인프라 의존 잔여 항목 (차단 사유 · 필요 입력)
+## 9. 운영 인프라 반복 항목 (로컬 수행 완료 · 운영 반복 시 필요 입력)
 
-코드만으로 완결할 수 없는 항목이다 — 아래 입력이 제공되면 각 절(§2·§3·§6·§7) 절차를 즉시 수행한다.
+전 항목 **로컬 Docker 환경 수행 완료(2026-07-10)**. 운영 환경에서 동일 절차로 반복할 때
+필요한 입력을 남긴다 — 리소스 지표만 앱 외부라 모니터링 스택 연동이 유일한 미수행 항목이다.
 
-| 항목 | 차단 사유 | 필요 입력 |
-|------|----------|----------|
-| 운영 검색엔진 재검증 (§6) | 운영 클러스터 접속 정보 없음 | 운영 `WORKFLOW_SEARCH_HOSTS`·driver 종류(ES/OpenSearch)·인증(basic 또는 API key, 배포 환경변수로만 전달) |
-| 실환경 Runbook 리허설 7종 (§2) | 운영/스테이징 인프라 미확정 | Worker·Scheduler 배포 노드, zone mount 구성, 리허설 window |
-| 실 부하 테스트 T5 (§3) | 동일 | 목표 처리량, 샘플 미디어 세트, TC 노드 사양 |
-| 백업/복구 리허설 (§7) | 동일 | DB 백업 정책, MASTER zone 스냅샷 수단 |
-| 리소스 지표 (§4-7) | 앱 외부 — 노드 모니터링 스택 필요 | 모니터링 시스템(Prometheus/CloudWatch 등) 연동 대상 |
+| 항목 | 로컬 수행 | 운영 반복 시 필요 입력 |
+|------|----------|------------------------|
+| 실 검색엔진 검증 (§6) | 완료 — 실 ES 8.17, 중단/백오프/회복 포함 | 운영 `WORKFLOW_SEARCH_HOSTS`·driver 종류·인증(배포 환경변수로만 전달) |
+| Runbook 리허설 7종 (§2) | 완료 — `scripts/ops/rehearsal/` 3부 전건 PASS | Worker·Scheduler 배포 노드, zone mount 구성, 리허설 window |
+| 부하 테스트 T5 (§3) | 완료 — 실제 데몬 3대·이중 실행 0건 | 목표 처리량, 샘플 미디어 세트, TC 노드 사양 |
+| 백업/복구 리허설 (§7) | 완료 — pg_dump/restore·checksum 일치 | DB 백업 정책, MASTER zone 스냅샷 수단 |
+| 리소스 지표 (§4-7) | **미수행** — 앱 외부 | 모니터링 시스템(Prometheus/CloudWatch 등) 연동 대상 |
 
 ## 10. 게이트 판정 요약
 
 | 영역 | 판정 |
 |------|------|
 | CI 게이트 5종 | 통과 (자동화) |
-| Runbook 리허설 7종 | 테스트 레벨 전건 커버 — 실 환경 리허설은 인프라 확정 후 (§9) |
-| 부하 T5 | 테스트 레벨 커버 — 실 부하는 인프라 확정 후 (§9) |
+| Runbook 리허설 7종 | 테스트 전건 커버 + 로컬 Docker 리허설 전건 통과 (§2) — 운영 반복 권장 |
+| 부하 T5 | 테스트 커버 + 로컬 실 데몬 부하 통과 (§3) — 운영 처리량 기준 반복 권장 |
 | 지표 10종 | 9/10 대시보드 노출 (리소스 지표만 외부 — §9) |
-| 알림 | 영속화·ack API·이메일 발송 구현 (ADR-0006) |
+| 알림 | 영속화·ack API·이메일 발송 구현 (ADR-0006) — 리허설에서 alert 영속화 확인 |
 | 선택 작업 | OCR·WAVEFORM 구현 + STALE 재색인 루프 — STT·AI_ANALYSIS만 정의 대기 (§8) |
-| 실 검색엔진 | 로컬 실 ES 검증 완료 — 운영 클러스터 재검증 대기 (§9) |
-| 백업/복구 | 미수행 — 운영 인프라 필요 (§9) |
+| 실 검색엔진 | 로컬 실 ES 전 절차 검증(중단/회복 포함) — 운영 클러스터는 접속 정보 제공 시 반복 (§9) |
+| 백업/복구 | 로컬 수행 완료 — 운영 백업 정책 기반 반복 (§7·§9) |
