@@ -194,6 +194,8 @@ async function renderDashboard() {
     .map(b => `<div class="banner">⚠ ${esc(b.message)}</div>`).join('');
   const workers = Object.entries(data.workers ?? {})
     .map(([s, n]) => `${badge('worker', s)} ${n}`).join(' &nbsp; ');
+  const searchIndex = ['INDEXED','STALE','PENDING','FAILED']
+    .map(s => `${s} ${data.search_index?.[s] ?? 0}`).join(' / ');
 
   view.innerHTML = `
     <div class="page-title">워크플로우 대시보드</div>
@@ -207,6 +209,8 @@ async function renderDashboard() {
         <span class="k">평균 처리</span><span>${data.metrics.avg_processing_sec}s (p95 ${data.metrics.p95_processing_sec}s)</span>
         <span class="k">실패율 / 재시도율</span><span>${(data.metrics.failure_rate * 100).toFixed(1)}% / ${(data.metrics.retry_rate * 100).toFixed(1)}%</span>
         <span class="k">최근 1시간 처리</span><span>${data.metrics.throughput_1h}건</span>
+        <span class="k">Lease 회수 (24h)</span><span>${data.metrics.lease_reclaims_24h ?? 0}건</span>
+        <span class="k">Search Index</span><span>${searchIndex}</span>
       </div></div>`;
 }
 

@@ -1093,6 +1093,10 @@ components:
             failure_rate: { type: number }
             retry_rate: { type: number }
             throughput_1h: { type: integer }
+            lease_reclaims_24h: { type: integer }
+        search_index:
+          type: object
+          additionalProperties: { type: integer }
         throughput_24h:
           type: array
           items:

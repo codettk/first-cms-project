@@ -83,7 +83,13 @@ class DashboardQueryService
                 'throughput_1h' => (int) DB::table('workflow_jobs')
                     ->where('status', 'SUCCESS')
                     ->where('finished_at', '>=', now()->subHour())->count(),
+                // Lease 회수 이벤트 — Scheduler reclaim 기록 집계 (Runbook 지표 8)
+                'lease_reclaims_24h' => (int) DB::table('workflow_job_histories')
+                    ->whereIn('note', ['lease_expired', 'worker_offline'])
+                    ->where('created_at', '>=', now()->subDay())->count(),
             ],
+            // Index 상태 집계 — INDEXED/STALE/FAILED/PENDING (Runbook 지표 10)
+            'search_index' => $countsBy('search_index_states'),
             'throughput_24h' => $throughput24h,
             'banners' => $this->deriveBanners(),
         ];

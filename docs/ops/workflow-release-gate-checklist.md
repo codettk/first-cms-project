@@ -46,11 +46,11 @@ WBS Milestone Plan §M5 · Implementation Roadmap Phase 8 · Incident Response R
 | 5 | 에러율 | `metrics.failure_rate` | 구현 |
 | 6 | 재시도 수 | `metrics.retry_rate` | 구현 |
 | 7 | 리소스 (CPU/메모리/디스크) | 앱 외부 — 인프라 모니터링(노드별) 연동 | **외부, M5 잔여 항목** |
-| 8 | Lease 회수 이벤트 | `workflow_job_histories` note(`lease_expired`/`worker_offline`) 집계로 조회 가능 — 대시보드 미노출 | 부분 |
+| 8 | Lease 회수 이벤트 | `metrics.lease_reclaims_24h` (`workflow_job_histories` note `lease_expired`/`worker_offline` 24h 집계) | 구현 |
 | 9 | 장애 이벤트 | `banners` (OFFLINE Worker·필수 job FAILED — ADR-0002 실시간 파생) | 구현 |
-| 10 | Index 상태 (INDEXED/STALE/RETRY) | `search_index_states` 집계 — 대시보드 미노출 (콘텐츠 상세에는 노출) | 부분 |
+| 10 | Index 상태 (INDEXED/STALE/PENDING/FAILED) | `search_index` (status별 집계) — 콘텐츠 상세에도 노출 | 구현 |
 
-> 8·10번의 대시보드 필드 추가는 openapi.yaml 계약 개정이 선행돼야 한다(임의 필드 추가 금지).
+> 8·10번은 openapi.yaml DashboardData 계약 개정과 함께 대시보드에 노출됐다 (지표 9/10 구현 — 리소스 지표만 외부).
 
 ## 5. 알림 발송
 

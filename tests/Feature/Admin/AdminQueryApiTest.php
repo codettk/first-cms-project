@@ -36,10 +36,36 @@ class AdminQueryApiTest extends AdminApiTestCase
             ->assertJsonStructure([
                 'success',
                 'data' => ['contents', 'jobs', 'workers', 'queue' => ['tc_queue_length', 'max_wait_sec'],
-                    'metrics' => ['avg_processing_sec', 'p95_processing_sec', 'failure_rate', 'retry_rate', 'throughput_1h'],
-                    'throughput_24h', 'banners'],
+                    'metrics' => ['avg_processing_sec', 'p95_processing_sec', 'failure_rate', 'retry_rate',
+                        'throughput_1h', 'lease_reclaims_24h'],
+                    'search_index', 'throughput_24h', 'banners'],
             ])
             ->assertJsonPath('data.jobs.WAITING', 8);
+    }
+
+    public function test_dashboard_exposes_lease_reclaims_and_index_state_metrics(): void
+    {
+        $content = $this->makePipelineContent();
+
+        // Lease 회수 이벤트 2건 — Scheduler reclaim 기록과 동일한 note (지표 8)
+        $job = WorkflowJob::query()->where('content_id', $content->id)->firstOrFail();
+        DB::table('workflow_job_histories')->insert([
+            ['job_id' => $job->id, 'from_status' => 'RUNNING', 'to_status' => 'RETRY',
+                'actor' => 'system', 'note' => 'lease_expired', 'created_at' => now()],
+            ['job_id' => $job->id, 'from_status' => 'RUNNING', 'to_status' => 'RETRY',
+                'actor' => 'system', 'note' => 'worker_offline', 'created_at' => now()],
+        ]);
+
+        // Index 상태 집계 (지표 10)
+        DB::table('search_index_states')->insert([
+            ['content_id' => $content->id, 'status' => 'STALE', 'index_version' => 1],
+        ]);
+
+        $this->actingAs($this->admin())
+            ->getJson('/admin/workflows/dashboard?refresh=1')
+            ->assertOk()
+            ->assertJsonPath('data.metrics.lease_reclaims_24h', 2)
+            ->assertJsonPath('data.search_index.STALE', 1);
     }
 
     public function test_dashboard_banners_derive_from_failures_and_offline_workers(): void
