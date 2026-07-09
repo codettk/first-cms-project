@@ -69,7 +69,9 @@ WBS Milestone Plan §M5 · Implementation Roadmap Phase 8 · Incident Response R
 2. 바인딩 확인: `app(SearchIndexClient::class)` 가 실제 driver 인스턴스인지
 3. smoke 문서 upsert → get 왕복 일치 (`workflow-smoke-test-{timestamp}` ID 패턴)
 4. 샘플 콘텐츠 업로드 → INDEX job SUCCESS → `search_index_states` INDEXED → 엔진에서 `content-{id}` 조회
-5. 검증 이력: 2026-07-08 로컬 Docker ES 8.17 기준 전 항목 통과. **운영 원격 클러스터 재검증은 접속 정보 확보 후 수행 — M5 잔여 항목**
+5. 검증 이력: 2026-07-08 로컬 Docker ES 8.17 기준 전 항목 통과. 2026-07-09 v1.0-mvp 코드
+   기준 재검증 — 바인딩(ElasticsearchSearchIndexClient)·smoke upsert/get 왕복 통과.
+   **운영 원격 클러스터 재검증은 접속 정보 확보 후 수행 — M5 잔여 항목 (§9)**
 - 테스트 환경은 phpunit.xml이 dev driver로 고정한다 (`WORKFLOW_SEARCH_DRIVER=dev`)
 
 ## 7. 배포·복구 절차
