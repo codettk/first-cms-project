@@ -29,6 +29,9 @@ return [
         'pdftoppm' => env('WORKFLOW_TOOL_PDFTOPPM', 'pdftoppm'),
         'pdftotext' => env('WORKFLOW_TOOL_PDFTOTEXT', 'pdftotext'),
         'soffice' => env('WORKFLOW_TOOL_SOFFICE', 'soffice'),
+        // 선택 작업 — OCR(Job Type Def §3.9)·WAVEFORM(Transcode Profile Spec §6)
+        'tesseract' => env('WORKFLOW_TOOL_TESSERACT', 'tesseract'),
+        'audiowaveform' => env('WORKFLOW_TOOL_AUDIOWAVEFORM', 'audiowaveform'),
     ],
 
     // 검색 색인 driver — dev(cache mock)|elasticsearch|opensearch (ADR-0005).

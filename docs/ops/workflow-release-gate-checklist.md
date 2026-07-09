@@ -82,8 +82,10 @@ WBS Milestone Plan §M5 · Implementation Roadmap Phase 8 · Incident Response R
 
 ## 8. 미구현 선택 job 잔여 대기 정책 (의도된 상태)
 
-WBS §M6 보류 유형(OCR·STT·WAVEFORM)은 템플릿 seed에 선택 step(is_required=false)으로
-존재하지만 Handler가 없다. 동작은 다음과 같으며 **운영상 의도된 잔여 대기**다.
+**OCR·WAVEFORM은 구현 완료** (Job Type Def §3.9 · Transcode Profile Spec §6 — OCR/AUDIO
+worker_type이 소비, OCR SUCCESS 시 INDEXED→STALE 재색인 예약). 잔여 미구현 유형은
+**STT**(AUDIO 템플릿 선택 step, 작업 정의 §3 미작성)와 **AI_ANALYSIS**(템플릿 미포함)다.
+STT의 동작은 다음과 같으며 **운영상 의도된 잔여 대기**다.
 
 - Scheduler는 선행 job SUCCESS 시 선택 job도 WAITING→READY로 승격한다 (인스턴스 SUCCESS 종결 후 포함).
 - 어떤 worker_type의 supported_job_types에도 포함되지 않으므로 claim되지 않고 READY로 대기한다.
@@ -91,7 +93,7 @@ WBS §M6 보류 유형(OCR·STT·WAVEFORM)은 템플릿 seed에 선택 step(is_r
 - 자동화 근거: `tests/Feature/Queue/OptionalJobPolicyTest.php` · `tests/Feature/E2E/AudioPipelineTest.php`
 - 운영 주의: 대시보드 대기열 지표(`jobs.READY`)에 이 잔여 대기 수가 상시 포함된다 —
   READY 적체 알람 임계값 설정 시 선택 job 잔여분을 기저값으로 반영할 것.
-- 해제 시점: 해당 유형의 작업 정의 확정·Handler 구현 후 worker `--job-types`에 추가하면
+- 해제 시점: STT 작업 정의(엔진 선정 포함) 확정·Handler 구현 후 worker 매핑에 추가하면
   기존 READY 잔여 job부터 자연 소진된다.
 
 ## 9. 게이트 판정 요약

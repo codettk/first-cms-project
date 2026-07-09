@@ -8,8 +8,8 @@ use Tests\TestCase;
 
 /**
  * 구현 범위 가드 — MVP Scope Git Strategy §2 · WBS §M6.
- * MVP 8종 + M6 확장(IMAGE_TC·AUDIO_TC)은 등록돼야 하고, 작업 정의가 미확정인
- * 유형(OCR·STT·AI_ANALYSIS·WAVEFORM·HLS)은 Handler가 없어야 한다.
+ * MVP 8종 + M6 확장 + 선택 작업(OCR·WAVEFORM)은 등록돼야 하고, 작업 정의가
+ * 미확정인 유형(STT·AI_ANALYSIS·HLS)은 Handler가 없어야 한다.
  * DB enum/seed에 확장값이 존재하는 것은 허용된다.
  */
 class MvpScopeGuardTest extends TestCase
@@ -18,11 +18,11 @@ class MvpScopeGuardTest extends TestCase
 
     private const array IMPLEMENTED_HANDLER_TYPES = [
         'TM', 'VERIFY', 'MA', 'TC', 'CA', 'INDEX', 'PUBLISH', 'CLEANUP',
-        'IMAGE_TC', 'AUDIO_TC', 'DOC_PREVIEW', 'TEXT_EXTRACT',
+        'IMAGE_TC', 'AUDIO_TC', 'DOC_PREVIEW', 'TEXT_EXTRACT', 'OCR', 'WAVEFORM',
     ];
 
     private const array EXCLUDED_TYPES = [
-        'OCR', 'STT', 'AI_ANALYSIS', 'WAVEFORM',
+        'STT', 'AI_ANALYSIS',
     ];
 
     public function test_implemented_handlers_are_registered(): void
@@ -48,7 +48,7 @@ class MvpScopeGuardTest extends TestCase
         $handlerDir = app_path('Services/Workflow/Worker/Handlers');
         $files = array_map('basename', glob($handlerDir.'/*.php') ?: []);
 
-        $forbidden = ['Ocr', 'Stt', 'AiAnalysis', 'Hls', 'Waveform'];
+        $forbidden = ['Stt', 'AiAnalysis', 'Hls'];
 
         foreach ($files as $file) {
             foreach ($forbidden as $prefix) {

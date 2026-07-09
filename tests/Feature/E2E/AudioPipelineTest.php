@@ -25,7 +25,8 @@ use Tests\TestCase;
  * INDEX → PUBLISH → CLEANUP → contents.status = READY (Job Type Def §4 AUDIO 체인).
  *
  * 실제 ffmpeg/ffprobe를 사용한다 — 미설치 환경에서는 skip.
- * WAVEFORM·STT는 선택 step이며 작업 정의 미확정으로 Handler가 없다 — READY 잔존이 정상이다.
+ * WAVEFORM(구현됨·AUDIO worker 전담)·STT(작업 정의 미확정)는 이 worker의
+ * supported_job_types에 없어 READY 잔존이 정상이다 (SM Spec §7 비차단).
  */
 class AudioPipelineTest extends TestCase
 {
@@ -154,7 +155,7 @@ class AudioPipelineTest extends TestCase
         $this->assertSame('INDEXED', DB::table('search_index_states')
             ->where('content_id', $content->id)->value('status'));
 
-        // 선택 step(WAVEFORM·STT)은 Handler 미구현 — 종결되지 않아도 READY를 막지 않는다
+        // 선택 step(WAVEFORM·STT)은 이 worker 담당이 아니다 — 종결되지 않아도 READY를 막지 않는다
         $this->assertContains($statuses['WAVEFORM'], ['WAITING', 'READY']);
         $this->assertContains($statuses['STT'], ['WAITING', 'READY']);
 

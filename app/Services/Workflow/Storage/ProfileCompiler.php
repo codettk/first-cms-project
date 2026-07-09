@@ -172,6 +172,51 @@ class ProfileCompiler
         return $args;
     }
 
+    /**
+     * WAVEFORM audiowaveform 인자 — AUDIO_WAVEFORM_JSON 기준 (Transcode Profile Spec §6).
+     *
+     * @return list<string>
+     */
+    public function audiowaveformArgs(TranscodeProfile $profile, string $inputPath, string $outputPath): array
+    {
+        $params = $profile->params ?? [];
+
+        $args = ['-i', $inputPath, '-o', $outputPath];
+
+        if (isset($params['pixels_per_second'])) {
+            $args = [...$args, '--pixels-per-second', (string) $params['pixels_per_second']];
+        }
+
+        if (isset($params['bits'])) {
+            $args = [...$args, '-b', (string) $params['bits']];
+        }
+
+        return $args;
+    }
+
+    /**
+     * OCR tesseract 인자 — DOC_OCR_KO_EN 기준 (Job Type Def §3.9).
+     * 출력은 word 단위 신뢰도를 포함한 tsv — 도구가 {outputBase}.tsv를 생성한다.
+     *
+     * @return list<string>
+     */
+    public function tesseractArgs(TranscodeProfile $profile, string $inputPath, string $outputBase): array
+    {
+        $params = $profile->params ?? [];
+
+        $args = [$inputPath, $outputBase];
+
+        if (isset($params['lang'])) {
+            $args = [...$args, '-l', (string) $params['lang']];
+        }
+
+        if (isset($params['psm'])) {
+            $args = [...$args, '--psm', (string) $params['psm']];
+        }
+
+        return [...$args, 'tsv'];
+    }
+
     private function videoEncoder(TranscodeProfile $profile): string
     {
         return match ($profile->codec) {
