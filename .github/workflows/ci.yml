@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feature/**"]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  test:
+    name: PHPUnit (pgsql)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: first_cms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_pgsql, pgsql, mbstring, intl
+          coverage: none
+
+      - name: Install workflow media toolchain (E2E pipeline tests)
+        # libreoffice 메타패키지는 recommends 의존성이 커서 러너에서 20분 이상 소요/행 —
+        # DOC 파이프라인이 쓰는 변환 컴포넌트(writer·impress)만 비대화형으로 설치한다
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ffmpeg libvips-tools poppler-utils libreoffice-writer libreoffice-impress \
+            tesseract-ocr tesseract-ocr-kor
+
+      - name: Install audiowaveform (optional WAVEFORM E2E)
+        # universe 저장소에 없으면 skip — WAVEFORM handler는 FakeToolRunner 테스트가 커버한다
+        run: sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends audiowaveform || echo "audiowaveform unavailable — skipping"
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run migrations and seeds (idempotency check)
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: first_cms_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: |
+          php artisan migrate:fresh --seed --force
+          php artisan db:seed --force
+
+      - name: Run tests
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: php artisan test
+
+  openapi-lint:
+    name: OpenAPI contract lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - name: Spectral lint (0 errors, 0 warnings gate)
+        run: npx --yes @stoplight/spectral-cli lint openapi.yaml --fail-severity=warn

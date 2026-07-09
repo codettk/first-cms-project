@@ -1,0 +1,9 @@
+extends: ["spectral:oas"]
+overrides:
+  # FailureImpact·JobSummary는 Admin API Spec §4·§5가 정의하는 계약 스키마 —
+  # 현재 응답 본문에서 직접 참조되지 않지만 스펙이 정의를 요구하므로 유지한다.
+  - files:
+      - "openapi.yaml#/components/schemas/FailureImpact"
+      - "openapi.yaml#/components/schemas/JobSummary"
+    rules:
+      oas3-unused-component: "off"
