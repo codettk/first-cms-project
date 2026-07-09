@@ -13,20 +13,26 @@ use Illuminate\Console\Command;
 class WorkflowWorkerCommand extends Command
 {
     protected $signature = 'workflow:worker
-        {--name= : worker_name (기본: {type}-{hostname}-{pid})}
-        {--worker-type=GENERAL : TM|GENERAL|TRANSCODE|IMAGE|INDEX (MVP 운용 유형)}
+        {--name= : worker_name (기본: type-hostname-pid 조합)}
+        {--worker-type=GENERAL : TM|GENERAL|TRANSCODE|IMAGE|AUDIO|DOCUMENT|OCR|INDEX (Worker Agent Spec §3)}
         {--job-types= : 콤마 구분 job_type 목록 — 미지정 시 worker-type 기본 매핑}
         {--once : 큐 1회 폴링 후 종료 (테스트·CI용)}
         {--max-jobs=0 : N건 처리 후 종료 (0 = 무제한)}';
 
     protected $description = 'Workflow Worker 데몬 — Claim → 실행 → 완료 기록 루프';
 
-    /** worker_type별 기본 supported_job_types — Worker Agent Spec §3 (MVP 대상만) */
+    /**
+     * worker_type별 기본 supported_job_types — Worker Agent Spec §3 전체 매핑.
+     * STT·AI_ANALYSIS는 스펙에 worker 배정이 없어(작업 정의 미확정) 어떤 유형에도 넣지 않는다.
+     */
     private const array TYPE_MAP = [
         'TM' => ['TM'],
         'GENERAL' => ['VERIFY', 'MA', 'PUBLISH', 'CLEANUP'],
         'TRANSCODE' => ['TC'],
-        'IMAGE' => ['CA'], // MVP: VIDEO 파이프라인 CA만 — IMAGE_TC는 M6 확장
+        'IMAGE' => ['IMAGE_TC', 'CA'],
+        'AUDIO' => ['AUDIO_TC', 'WAVEFORM'],
+        'DOCUMENT' => ['DOC_PREVIEW', 'TEXT_EXTRACT'],
+        'OCR' => ['OCR'],
         'INDEX' => ['INDEX'],
     ];
 
