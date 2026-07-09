@@ -39,7 +39,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ffmpeg libvips-tools poppler-utils libreoffice-writer libreoffice-impress
+            ffmpeg libvips-tools poppler-utils libreoffice-writer libreoffice-impress \
+            tesseract-ocr tesseract-ocr-kor
+
+      - name: Install audiowaveform (optional WAVEFORM E2E)
+        # universe 저장소에 없으면 skip — WAVEFORM handler는 FakeToolRunner 테스트가 커버한다
+        run: sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends audiowaveform || echo "audiowaveform unavailable — skipping"
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
