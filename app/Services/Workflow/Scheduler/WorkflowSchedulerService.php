@@ -3,10 +3,12 @@
 namespace App\Services\Workflow\Scheduler;
 
 use App\Enums\ContentStatus;
+use App\Enums\IndexStatus;
 use App\Enums\InstanceStatus;
 use App\Enums\JobStatus;
 use App\Enums\WorkerStatus;
 use App\Models\Content;
+use App\Models\SearchIndexState;
 use App\Models\WorkflowInstance;
 use App\Models\WorkflowJob;
 use App\Models\WorkflowWorkerAgent;
@@ -58,6 +60,7 @@ class WorkflowSchedulerService
             'ready' => $this->promoteReadyJobs(),          // ① WAITING → READY
             'skipped' => $this->propagateSkips(),          // ② SKIPPED 전파 + 인스턴스/콘텐츠 FAILED
             'publish' => $this->gatePublishJobs(),         // ③ PUBLISH 판정
+            'reindex' => $this->createStaleReindexJobs(),  // ③-b STALE 재색인 (SM Spec §14)
             'retry' => $this->resumeRetries(),             // ④ RETRY 재개 (retry_count 증가 — ADR-0003)
             'timeout' => $this->handleTimeouts(),          // ⑤ 타임아웃 감시
             'locks' => $this->reclaimExpiredLocks(),       // ⑥ 만료 Lock 회수
@@ -209,6 +212,65 @@ class WorkflowSchedulerService
                 $job, JobStatus::Ready->value, 'scheduler', 'publish_gate'
             ));
             $count += $result->ok ? 1 : 0;
+        }
+
+        return $count;
+    }
+
+    /**
+     * ③-b STALE 재색인 — 색인 갱신 필요 콘텐츠에 단독 INDEX job 생성 (SM Spec §14).
+     * 메타 수정·선택 작업(OCR 등) SUCCESS가 INDEXED→STALE로 마킹한 상태를 소진한다.
+     */
+    private function createStaleReindexJobs(): int
+    {
+        $staleStates = SearchIndexState::query()
+            ->where('status', IndexStatus::Stale->value)
+            ->get();
+
+        $count = 0;
+
+        foreach ($staleStates as $state) {
+            // 비종결 INDEX job이 이미 있으면 그 실행이 STALE을 소진한다 — 중복 생성 금지
+            $active = WorkflowJob::query()
+                ->where('content_id', $state->content_id)
+                ->where('job_type', 'INDEX')
+                ->whereIn('status', [
+                    JobStatus::Waiting->value, JobStatus::Ready->value,
+                    JobStatus::Running->value, JobStatus::Retry->value,
+                ])
+                ->exists();
+
+            if ($active) {
+                continue;
+            }
+
+            // 승격 가능한 인스턴스(RUNNING|SUCCESS)에만 부착 — 없으면 수동 재색인 대상으로 남긴다
+            $instance = WorkflowInstance::query()
+                ->where('content_id', $state->content_id)
+                ->whereIn('status', [InstanceStatus::Running->value, InstanceStatus::Success->value])
+                ->orderByDesc('id')
+                ->first();
+
+            if ($instance === null) {
+                continue;
+            }
+
+            DB::transaction(function () use ($state, $instance) {
+                $job = WorkflowJob::create([
+                    'instance_id' => $instance->id,
+                    'content_id' => $state->content_id,
+                    'job_type' => 'INDEX',
+                    'status' => JobStatus::Waiting,
+                    'is_required' => false, // 재색인 실패가 콘텐츠를 차단하면 안 된다 (SM Spec §7)
+                    'priority' => 50,       // 재색인 우선순위 (Queue Worker Spec §12)
+                    'max_retry' => 5,
+                    'timeout_sec' => 300,
+                ]);
+
+                $this->jobs->recordCreation($job, 'scheduler', 'stale_reindex');
+            });
+
+            $count++;
         }
 
         return $count;
